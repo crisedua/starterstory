@@ -7,31 +7,34 @@ Robbins) y propone soluciones validables con MVT.
 ## Stack
 
 - **Frontend**: React 18 + Vite + React Router + `@supabase/supabase-js`
-- **Backend**: Node 18+ / Express (orquesta scraping y llamadas a Anthropic)
+- **Backend**: Express empaquetado como **Vercel Serverless Function** (`api/[...path].js`)
 - **DB**: **Supabase** (Postgres administrado)
 - **Scraping**: Apify (`streamers/youtube-scraper`)
 - **IA**: Anthropic Claude
-- **Scheduling**: node-cron en el backend
+- **Scheduling**: **Vercel Cron** (configurado en `vercel.json`)
 
-## Setup
+> Todo se despliega en un solo proyecto de Vercel — frontend, API y cron.
+> No necesitas Render ni otro host adicional.
+
+## Setup local
 
 ### 1. Crear proyecto en Supabase
-1. Crea un proyecto en https://supabase.com
-2. Abre **SQL Editor** → New query
-3. Pega el contenido de `supabase/migrations/001_initial_schema.sql` y ejecuta
-4. Copia desde Settings → API:
+1. https://supabase.com → crea un proyecto
+2. SQL Editor → New query → pega y ejecuta `supabase/migrations/001_initial_schema.sql`
+3. Repite con `supabase/migrations/002_pain_points_seed.sql`
+4. Settings → API → copia:
    - `Project URL` → `SUPABASE_URL`
-   - `anon public key` → `SUPABASE_ANON_KEY`
-   - `service_role secret key` → `SUPABASE_SERVICE_ROLE_KEY` (¡no lo expongas!)
+   - `anon public` → `SUPABASE_ANON_KEY`
+   - `service_role secret` → `SUPABASE_SERVICE_ROLE_KEY` (¡secreto, nunca al frontend!)
 
-### 2. Configurar variables de entorno
+### 2. Variables de entorno
 
-`backend/.env`:
+`backend/.env` (solo dev local):
 ```
-PORT=4000
 SUPABASE_URL=https://xxxxxxxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
-SUPABASE_ANON_KEY=eyJ...
+APIFY_TOKEN=apify_api_...   # opcional aquí, también se puede setear desde la UI
+ANTHROPIC_API_KEY=sk-ant-... # idem
 ```
 
 `frontend/.env`:
@@ -40,53 +43,39 @@ VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...
 ```
 
-### 3. Instalar y ejecutar
+### 3. Instalar y correr
 ```bash
-npm run install:all
+npm install
 npm run dev
 ```
 - Backend en http://localhost:4000
 - Frontend en http://localhost:5173
 
-Abre el frontend → **Ajustes** → carga `APIFY_TOKEN` y `ANTHROPIC_API_KEY` (estos sí
-se guardan en Supabase, encriptados a nivel de tabla, accesibles solo desde el backend con service role).
-
-Luego en **Scraper & Logs** define el cron y pulsa "Ejecutar ahora".
-
-## Despliegue
-
-### Frontend (Vercel)
-El repo incluye `vercel.json` que apunta a `frontend/`. Pasos:
+## Despliegue en Vercel (producción)
 
 1. Importa el repo en Vercel.
-2. **Framework Preset: Other** (no Vite — el `vercel.json` ya define todo).
-3. **Environment variables** (Settings → Environment Variables):
-   - `VITE_SUPABASE_URL`
+2. **Framework Preset: Other** (el `vercel.json` ya define todo).
+3. **Environment Variables** (Settings → Environment Variables):
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `APIFY_TOKEN`
+   - `ANTHROPIC_API_KEY`
+   - `VITE_SUPABASE_URL` (mismo valor que `SUPABASE_URL`)
    - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_API_URL` → URL absoluta del backend desplegado (ej: `https://miapp-backend.onrender.com`)
+   - *(opcional)* `CRON_SECRET` — si lo defines, el endpoint `/api/cron/scrape` exige `Authorization: Bearer <secret>`
 4. Deploy.
 
-> Si Vercel ya creó el proyecto antes de tener `vercel.json`, puede que tenga "Root Directory" o "Build Command" custom guardados. Ve a Settings → General y déjalos vacíos para que tome los del `vercel.json`.
-
-### Backend (Render / Railway / Fly / VPS)
-Vercel no sirve para el backend porque necesita un proceso persistente (`node-cron`). Opciones:
-
-- **Render.com** (gratis, recomendado para esto):
-  - New Web Service → conecta el repo
-  - Root Directory: `backend`
-  - Build Command: `npm install`
-  - Start Command: `npm start`
-  - Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`
-- **Railway** o **Fly.io**: similar, ambos detectan Node automáticamente.
-
-Después de desplegar el backend, copia su URL pública en `VITE_API_URL` del frontend en Vercel y redeploya el frontend.
+Vercel detectará automáticamente:
+- `api/[...path].js` y `api/cron/scrape.js` → serverless functions
+- `frontend/` → static build (gracias al `buildCommand` del `vercel.json`)
+- `crons` en `vercel.json` → ejecuta el scrape diario a las 3 AM UTC
 
 ## Roadmap por etapas
 
 - [x] **Etapa 1 — Foundation**: estructura, Supabase + esquema, shell UI, ajustes.
-- [ ] **Etapa 2 — Scraper**: Apify + scheduling + logs + análisis IA por video.
-- [ ] **Etapa 3 — Wizard RPM**.
-- [ ] **Etapa 4 — Pain Points LATAM + Clasificador**.
+- [x] **Etapa 2 — Scraper**: Apify + scheduling + logs + análisis IA por video.
+- [x] **Etapa 3 — Wizard RPM** con depth-check y procesamiento IA.
+- [x] **Etapa 4 — Pain Points LATAM + Clasificador IA** dinámico.
 - [ ] **Etapa 5 — Motor de Soluciones**.
 - [ ] **Etapa 6 — MVT**.
 
@@ -94,17 +83,15 @@ Después de desplegar el backend, copia su URL pública en `VITE_API_URL` del fr
 
 Sí. La tabla `channels` es la raíz; `videos.channel_id` la referencia y
 `scraper_config` se configura por canal. Para añadir un segundo canal basta con
-`POST /api/channels` + configurar su cron — sin migración.
+`POST /api/channels` + configurar su scheduling — sin migración.
 
-## Decisión de diseño: ¿por qué Express si tenemos Supabase?
+## Decisión de diseño: ¿por qué Express dentro de un serverless?
 
-Supabase puede ser consumido directo desde el navegador, pero tres operaciones
-**no pueden** vivir en el cliente:
-1. **Scraping con Apify**: requiere el token de Apify (no exponer al browser).
-2. **Llamadas a Anthropic**: requiere la API key (no exponer al browser).
-3. **Cron jobs**: necesitan un proceso persistente.
-
-Por eso el backend Express actúa como capa de orquestación y usa el
-`service_role` de Supabase para escribir resultados. El frontend lee directo de
-Supabase (con `anon key`) cuando se requiere realtime, y consume el backend para
-las acciones que disparan trabajo (run scraper, generar soluciones, etc).
+`api/[...path].js` carga el Express app una sola vez por contenedor (warm) y
+delega cada request. Esto permite:
+- Reutilizar todas las rutas (`settings`, `channels`, `videos`, `scraper`, `rpm`,
+  `pain-points`) sin duplicar lógica.
+- Mantener el mismo backend para dev local (`backend/src/server.js`) y producción
+  (Vercel) — un solo set de servicios y rutas.
+- El cron de Vercel llama a `api/cron/scrape.js` que reusa `runScrape()` de los
+  mismos servicios.
