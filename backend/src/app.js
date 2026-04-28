@@ -16,11 +16,12 @@ export function createApp() {
 
   app.get('/api/health', async (req, res) => {
     // Detecta problemas de configuración antes de tocar la DB
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    if (!url || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const where = process.env.VERCEL ? 'Vercel → Settings → Environment Variables' : 'backend/.env';
       return res.status(500).json({
         ok: false,
-        error: `Faltan SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY en ${where}.`,
+        error: `Faltan variables de Supabase en ${where}.`,
         config_missing: true,
       });
     }

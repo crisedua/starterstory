@@ -3,17 +3,20 @@ import { createClient } from '@supabase/supabase-js';
 let _client = null;
 
 function ensureEnv() {
-  const url = process.env.SUPABASE_URL;
+  // Fallback a VITE_SUPABASE_URL para que con setear solo la variable VITE_
+  // en Vercel, el backend también pueda leer el URL.
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
     const where = process.env.VERCEL ? 'Vercel → Settings → Environment Variables' : 'backend/.env';
-    throw new Error(
-      `Backend mal configurado: SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY ` +
-      `no están definidas. Configúralas en ${where} y redeploya.`
-    );
+    const missing = [
+      !url && '(SUPABASE_URL o VITE_SUPABASE_URL)',
+      !key && 'SUPABASE_SERVICE_ROLE_KEY',
+    ].filter(Boolean).join(' y ');
+    throw new Error(`Backend mal configurado: falta ${missing}. Configúralo en ${where} y redeploya.`);
   }
   if (!url.startsWith('https://')) {
-    throw new Error(`SUPABASE_URL inválida (${url}). Debe ser https://xxx.supabase.co`);
+    throw new Error(`URL de Supabase inválida (${url}). Debe ser https://xxx.supabase.co`);
   }
   return { url, key };
 }
