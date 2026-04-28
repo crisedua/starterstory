@@ -53,6 +53,34 @@ se guardan en Supabase, encriptados a nivel de tabla, accesibles solo desde el b
 
 Luego en **Scraper & Logs** define el cron y pulsa "Ejecutar ahora".
 
+## Despliegue
+
+### Frontend (Vercel)
+El repo incluye `vercel.json` que apunta a `frontend/`. Pasos:
+
+1. Importa el repo en Vercel.
+2. **Framework Preset: Other** (no Vite — el `vercel.json` ya define todo).
+3. **Environment variables** (Settings → Environment Variables):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_API_URL` → URL absoluta del backend desplegado (ej: `https://miapp-backend.onrender.com`)
+4. Deploy.
+
+> Si Vercel ya creó el proyecto antes de tener `vercel.json`, puede que tenga "Root Directory" o "Build Command" custom guardados. Ve a Settings → General y déjalos vacíos para que tome los del `vercel.json`.
+
+### Backend (Render / Railway / Fly / VPS)
+Vercel no sirve para el backend porque necesita un proceso persistente (`node-cron`). Opciones:
+
+- **Render.com** (gratis, recomendado para esto):
+  - New Web Service → conecta el repo
+  - Root Directory: `backend`
+  - Build Command: `npm install`
+  - Start Command: `npm start`
+  - Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APIFY_TOKEN`, `ANTHROPIC_API_KEY`
+- **Railway** o **Fly.io**: similar, ambos detectan Node automáticamente.
+
+Después de desplegar el backend, copia su URL pública en `VITE_API_URL` del frontend en Vercel y redeploya el frontend.
+
 ## Roadmap por etapas
 
 - [x] **Etapa 1 — Foundation**: estructura, Supabase + esquema, shell UI, ajustes.

@@ -23,6 +23,16 @@ export default function VideoDetail() {
     } finally { setAnalyzing(false); }
   }
 
+  async function classify(force = false) {
+    setAnalyzing(true); setMsg(null);
+    try {
+      await api.classifyVideo(id, force);
+      await reload();
+      setMsg({ type: 'info', text: 'Clasificación contra pain points completada.' });
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setAnalyzing(false); }
+  }
+
   if (error) return <div className="alert alert-err">{error}</div>;
   if (!v) return <p className="muted">Cargando…</p>;
 
@@ -90,6 +100,36 @@ export default function VideoDetail() {
             <h4>Herramientas</h4>
             <div className="flex" style={{ flexWrap: 'wrap' }}>{tools.map((t, i) => <span key={i} className="badge">{t}</span>)}</div>
           </>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="between">
+          <h3 style={{ marginTop: 0 }}>Clasificación contra Pain Points LATAM</h3>
+          <button className="btn btn-secondary" disabled={analyzing || !a} onClick={() => classify(true)}>
+            {v.classifications?.length ? 'Re-clasificar' : 'Clasificar'}
+          </button>
+        </div>
+        {!a && <p className="muted small">Requiere análisis IA primero.</p>}
+        {a && (!v.classifications || v.classifications.length === 0) && (
+          <p className="muted small">Aún no clasificado contra pain points.</p>
+        )}
+        {v.classifications && v.classifications.length > 0 && (
+          <table>
+            <thead><tr><th>Score</th><th>Categoría</th><th>Pain Point</th><th>Razonamiento</th></tr></thead>
+            <tbody>
+              {v.classifications
+                .sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0))
+                .map((c) => (
+                  <tr key={c.id}>
+                    <td><span className="badge">{((c.relevance_score || 0) * 100).toFixed(0)}%</span></td>
+                    <td><span className="badge">{c.category}</span></td>
+                    <td>{c.title}</td>
+                    <td className="small">{c.reasoning}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         )}
       </div>
 

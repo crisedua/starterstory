@@ -7,6 +7,7 @@ import channelsRouter from './routes/channels.js';
 import videosRouter from './routes/videos.js';
 import scraperRouter from './routes/scraper.js';
 import rpmRouter from './routes/rpm.js';
+import painPointsRouter from './routes/painPoints.js';
 import { rescheduleAll } from './jobs/scheduler.js';
 import { analyzeAllUnanalyzed } from './services/aiAnalyzer.js';
 
@@ -28,6 +29,7 @@ app.use('/api/channels', channelsRouter);
 app.use('/api/videos', videosRouter);
 app.use('/api/scraper', scraperRouter);
 app.use('/api/rpm', rpmRouter);
+app.use('/api/pain-points', painPointsRouter);
 
 app.post('/api/analyze/run', async (req, res) => {
   try {

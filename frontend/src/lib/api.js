@@ -1,4 +1,6 @@
-const BASE = '/api';
+// En dev: vite proxy reenvía /api -> backend local.
+// En prod: define VITE_API_URL apuntando al backend desplegado (Railway/Render/Fly).
+const BASE = (import.meta.env.VITE_API_URL || '') + '/api';
 
 async function request(path, opts = {}) {
   const r = await fetch(`${BASE}${path}`, {
@@ -49,4 +51,16 @@ export const api = {
     request('/rpm/depth-check', { method: 'POST', body: JSON.stringify({ step, answer }) }),
   processRpmProfile: () => request('/rpm/profile/process', { method: 'POST' }),
   resetRpmProfile: () => request('/rpm/profile/reset', { method: 'POST' }),
+
+  getPainPoints: () => request('/pain-points'),
+  getPainPoint: (id) => request(`/pain-points/${id}`),
+  createPainPoint: (data) => request('/pain-points', { method: 'POST', body: JSON.stringify(data) }),
+  updatePainPoint: (id, data) => request(`/pain-points/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePainPoint: (id) => request(`/pain-points/${id}`, { method: 'DELETE' }),
+  classifyAllVideos: (force = false) =>
+    request(`/pain-points/classify/all${force ? '?force=true' : ''}`, { method: 'POST' }),
+  reclassifyAllVideos: () =>
+    request('/pain-points/classify/reclassify-all', { method: 'POST' }),
+  classifyVideo: (videoId, force = false) =>
+    request(`/pain-points/classify/video/${videoId}${force ? '?force=true' : ''}`, { method: 'POST' }),
 };
