@@ -1,4 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
+import Icon from './components/Icon.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Settings from './pages/Settings.jsx';
 import Scraper from './pages/Scraper.jsx';
@@ -9,47 +10,56 @@ import RpmWizard from './pages/RpmWizard.jsx';
 import Solutions from './pages/Solutions.jsx';
 import Mvt from './pages/Mvt.jsx';
 
+const NAV = [
+  { section: 'Inicio', items: [
+    { to: '/', icon: 'home', label: 'Dashboard', end: true },
+  ]},
+  { section: 'Fase 1 — Scraping', items: [
+    { to: '/scraper', icon: 'zap', label: 'Scraper & Logs' },
+    { to: '/videos', icon: 'film', label: 'Videos' },
+  ]},
+  { section: 'Fase 3 — Clasificación', items: [
+    { to: '/pain-points', icon: 'bulb', label: 'Pain Points LATAM' },
+    { to: '/rpm', icon: 'target', label: 'Wizard RPM' },
+  ]},
+  { section: 'Fase 4 — Soluciones', items: [
+    { to: '/solutions', icon: 'sparkles', label: 'Motor de Soluciones' },
+  ]},
+  { section: 'Fase 5 — Validación', items: [
+    { to: '/mvt', icon: 'beaker', label: 'MVT' },
+  ]},
+  { section: 'Sistema', items: [
+    { to: '/settings', icon: 'cog', label: 'Ajustes' },
+  ]},
+];
+
 export default function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <h1>🚀 Starter <span>Story</span> LATAM</h1>
+        <div className="brand">
+          <div className="brand-mark">SS</div>
+          <div className="brand-name">
+            Starter Story <span>LATAM</span>
+          </div>
+        </div>
 
-        <div className="nav-section">Inicio</div>
-        <NavLink to="/" end className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          Dashboard
-        </NavLink>
-
-        <div className="nav-section">Fase 1 — Scraping</div>
-        <NavLink to="/scraper" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          Scraper & Logs
-        </NavLink>
-        <NavLink to="/videos" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          Videos
-        </NavLink>
-
-        <div className="nav-section">Fase 3 — Clasificación</div>
-        <NavLink to="/pain-points" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          Pain Points LATAM
-        </NavLink>
-        <NavLink to="/rpm" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          Wizard RPM
-        </NavLink>
-
-        <div className="nav-section">Fase 4 — Soluciones</div>
-        <NavLink to="/solutions" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          Motor de Soluciones
-        </NavLink>
-
-        <div className="nav-section">Fase 5 — Validación</div>
-        <NavLink to="/mvt" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          MVT
-        </NavLink>
-
-        <div className="nav-section">Sistema</div>
-        <NavLink to="/settings" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          Ajustes (APIs)
-        </NavLink>
+        {NAV.map((group) => (
+          <div key={group.section}>
+            <div className="nav-section">{group.section}</div>
+            {group.items.map((it) => (
+              <NavLink
+                key={it.to}
+                to={it.to}
+                end={it.end}
+                className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+              >
+                <Icon name={it.icon} size={15} />
+                {it.label}
+              </NavLink>
+            ))}
+          </div>
+        ))}
       </aside>
 
       <main className="main">

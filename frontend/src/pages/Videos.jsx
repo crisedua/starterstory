@@ -82,8 +82,13 @@ export default function Videos() {
           </thead>
           <tbody>
             {videos.length === 0 && (
-              <tr><td colSpan={7} className="muted center" style={{ padding: 24 }}>
-                Sin videos todavía. Ejecuta el scraper.
+              <tr><td colSpan={7}>
+                <div className="empty">
+                  <div className="empty-icon">🎬</div>
+                  <div className="empty-title">Sin videos todavía</div>
+                  <div className="empty-desc">Ve al Scraper, configura el cron y ejecuta una corrida para traer los videos del canal.</div>
+                  <a href="/scraper" className="btn">Ir al Scraper →</a>
+                </div>
               </td></tr>
             )}
             {videos.map((v) => (
