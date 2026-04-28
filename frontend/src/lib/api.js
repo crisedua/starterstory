@@ -3,10 +3,31 @@
 const BASE = (import.meta.env.VITE_API_URL || '') + '/api';
 
 async function request(path, opts = {}) {
-  const r = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
+  let r;
+  try {
+    r = await fetch(`${BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+    });
+  } catch (e) {
+    throw new Error(
+      `No se pudo conectar al backend en ${BASE}. ` +
+      (import.meta.env.VITE_API_URL
+        ? 'Verifica que VITE_API_URL apunte al backend correcto.'
+        : 'Define VITE_API_URL en las variables de entorno (o levanta el backend local en :4000).')
+    );
+  }
+
+  // Si Vercel devuelve index.html porque no hay backend, evitamos JSON.parse del HTML.
+  const contentType = r.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    if (r.status === 404) throw new Error(`Backend no encontrado (404 en ${BASE}${path}). ¿Está VITE_API_URL bien configurada?`);
+    throw new Error(
+      `El backend no respondió JSON (recibí ${contentType || 'sin content-type'}). ` +
+      'Probablemente VITE_API_URL no está apuntando al backend o el backend está caído.'
+    );
+  }
+
   if (!r.ok) {
     const err = await r.json().catch(() => ({ error: r.statusText }));
     throw new Error(err.error || 'Error de API');
@@ -33,7 +54,6 @@ export const api = {
     request(`/videos/${id}/analyze${force ? '?force=true' : ''}`, { method: 'POST' }),
 
   getScraperRun: (id) => request(`/scraper/runs/${id}`),
-
   getScraperConfig: () => request('/scraper/config'),
   updateScraperConfig: (channelId, data) =>
     request(`/scraper/config/${channelId}`, { method: 'PUT', body: JSON.stringify(data) }),
