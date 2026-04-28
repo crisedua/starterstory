@@ -77,6 +77,8 @@ export const api = {
   createPainPoint: (data) => request('/pain-points', { method: 'POST', body: JSON.stringify(data) }),
   updatePainPoint: (id, data) => request(`/pain-points/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePainPoint: (id) => request(`/pain-points/${id}`, { method: 'DELETE' }),
+  extractPainPoints: (replace = false) =>
+    request(`/pain-points/extract-from-videos${replace ? '?replace=true' : ''}`, { method: 'POST' }),
   classifyAllVideos: (force = false) =>
     request(`/pain-points/classify/all${force ? '?force=true' : ''}`, { method: 'POST' }),
   reclassifyAllVideos: () =>

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { supabase } from '../db/supabase.js';
 import { classifyVideo, classifyAll, reclassifyAll } from '../services/classifier.js';
+import { extractPainPointsFromVideos } from '../services/painPointExtractor.js';
 
 const router = Router();
 
@@ -106,6 +107,16 @@ router.post('/classify/all', async (req, res) => {
     // Background-ish: respondemos rápido y dejamos correr.
     classifyAll({ force }).catch((e) => console.error('classifyAll', e.message));
     res.json({ ok: true, message: 'clasificación iniciada' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Extraer pain points desde los análisis de videos (transcripts procesados)
+// + investigar aplicabilidad LATAM con IA
+router.post('/extract-from-videos', async (req, res) => {
+  try {
+    const replace = req.query.replace === 'true';
+    const r = await extractPainPointsFromVideos({ replaceExtracted: replace });
+    res.json({ ok: true, ...r });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
