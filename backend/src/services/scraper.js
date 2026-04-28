@@ -1,6 +1,5 @@
 import { ApifyClient } from 'apify-client';
 import { supabase, getSetting } from '../db/supabase.js';
-import { analyzeVideo } from './aiAnalyzer.js';
 
 const APIFY_ACTOR = 'streamers/youtube-scraper';
 
@@ -170,10 +169,7 @@ export async function runScrape(channelId, trigger = 'manual') {
       videos_updated: updatedCount,
     }).eq('id', runId);
 
-    // Análisis IA en background
-    analyzeNewVideos(newVideoIds).catch((e) => console.error('analyze error', e));
-
-    return { found: items.length, new: newCount, updated: updatedCount };
+    return { found: items.length, new: newCount, updated: updatedCount, new_video_ids: newVideoIds };
   } catch (e) {
     await supabase.from('scraper_runs').update({
       status: 'error',
@@ -181,12 +177,5 @@ export async function runScrape(channelId, trigger = 'manual') {
       error_message: String(e.message || e),
     }).eq('id', runId);
     throw e;
-  }
-}
-
-async function analyzeNewVideos(videoIds) {
-  for (const id of videoIds) {
-    try { await analyzeVideo(id); }
-    catch (e) { console.error('analyze', id, e.message); }
   }
 }

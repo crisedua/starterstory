@@ -25,9 +25,17 @@ export default function Videos() {
     setAnalyzing(true);
     setMsg(null);
     try {
-      const r = await api.analyzeAll();
-      setMsg({ type: 'info', text: `Análisis disparado para ${r.count} videos.` });
+      let total = 0;
+      // En Vercel cada call procesa hasta 5 videos (~40s).
+      // Iteramos hasta vaciar la cola de pendientes.
+      for (let i = 0; i < 30; i++) {
+        const r = await api.analyzeAll(5);
+        total += r.processed;
+        setMsg({ type: 'info', text: `Analizando… ${total} listos, quedan ${r.remaining}` });
+        if (r.remaining === 0 || r.processed === 0) break;
+      }
       await load();
+      setMsg({ type: 'info', text: `Completado: ${total} videos analizados.` });
     } catch (e) {
       setMsg({ type: 'err', text: e.message });
     } finally { setAnalyzing(false); }

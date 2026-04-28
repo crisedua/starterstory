@@ -53,10 +53,14 @@ export default function Scraper() {
   }
 
   async function runNow(channelId) {
-    setBusy(true); setMsg(null);
+    setBusy(true);
+    setMsg({ type: 'info', text: 'Ejecutando scraper… puede tardar 30-60s (Apify + inserts).' });
     try {
-      await api.runScraper(channelId);
-      setMsg({ type: 'info', text: 'Scraping iniciado. Los resultados aparecerán abajo.' });
+      const r = await api.runScraper(channelId);
+      setMsg({
+        type: 'info',
+        text: `Scrape completo: ${r.found || 0} encontrados, ${r.new || 0} nuevos, ${r.updated || 0} actualizados.`,
+      });
       await load();
     } catch (e) { setMsg({ type: 'err', text: e.message }); }
     finally { setBusy(false); }

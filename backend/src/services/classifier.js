@@ -125,10 +125,21 @@ export async function classifyVideo(videoId, { force = false } = {}) {
   return { matches: matches.length };
 }
 
-export async function classifyAll({ force = false } = {}) {
+export async function classifyAll({ force = false, limit = null } = {}) {
   // Solo videos con análisis IA disponible
   const { data: analyses } = await supabase.from('video_analyses').select('video_id');
-  const ids = (analyses || []).map((a) => a.video_id);
+  let ids = (analyses || []).map((a) => a.video_id);
+
+  // Si no se fuerza, saltar los ya clasificados (a nivel de batch top-level)
+  if (!force) {
+    const { data: classified } = await supabase
+      .from('video_pain_point_classifications').select('video_id');
+    const set = new Set((classified || []).map((c) => c.video_id));
+    ids = ids.filter((id) => !set.has(id));
+  }
+
+  const remainingTotal = ids.length;
+  if (limit) ids = ids.slice(0, limit);
 
   const results = [];
   for (const id of ids) {
@@ -139,13 +150,18 @@ export async function classifyAll({ force = false } = {}) {
       results.push({ id, ok: false, error: e.message });
     }
   }
-  return results;
+  return {
+    processed: results.length,
+    remaining: Math.max(0, remainingTotal - results.length),
+    results,
+  };
 }
 
-// Reclasificación masiva: borra todo y vuelve a clasificar.
-// Se llama cuando los pain points cambian.
-export async function reclassifyAll() {
-  // Truncar via DELETE (cascade ya cubre por FK pero esto es explícito)
-  await supabase.from('video_pain_point_classifications').delete().neq('id', 0);
-  return classifyAll({ force: true });
+// Borra todas las clasificaciones existentes. Se llama UNA vez,
+// luego el frontend itera classifyAll() hasta que remaining = 0.
+export async function resetClassifications() {
+  const { error } = await supabase
+    .from('video_pain_point_classifications').delete().neq('id', 0);
+  if (error) throw error;
+  return { ok: true };
 }

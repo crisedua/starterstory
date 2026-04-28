@@ -39,8 +39,15 @@ export default function PainPoints() {
   async function classifyAll() {
     setBusy(true); setMsg(null);
     try {
-      await api.classifyAllVideos(false);
-      setMsg({ type: 'info', text: 'Clasificación iniciada en background. Recarga en 1-2 min para ver resultados.' });
+      let total = 0;
+      for (let i = 0; i < 30; i++) {
+        const r = await api.classifyAllVideos(false, 5);
+        total += r.processed;
+        setMsg({ type: 'info', text: `Clasificando… ${total} listos, quedan ${r.remaining}` });
+        if (r.remaining === 0 || r.processed === 0) break;
+      }
+      await load();
+      setMsg({ type: 'info', text: `Completado: ${total} videos clasificados.` });
     } catch (e) { setMsg({ type: 'err', text: e.message }); }
     finally { setBusy(false); }
   }
@@ -49,8 +56,16 @@ export default function PainPoints() {
     if (!confirm('Esto borra TODAS las clasificaciones existentes y vuelve a clasificar todos los videos. ¿Continuar?')) return;
     setBusy(true); setMsg(null);
     try {
-      await api.reclassifyAllVideos();
-      setMsg({ type: 'info', text: 'Reclasificación iniciada. Tarda ~10s por video.' });
+      await api.resetClassifications();
+      let total = 0;
+      for (let i = 0; i < 30; i++) {
+        const r = await api.classifyAllVideos(false, 5);
+        total += r.processed;
+        setMsg({ type: 'info', text: `Reclasificando… ${total} listos, quedan ${r.remaining}` });
+        if (r.remaining === 0 || r.processed === 0) break;
+      }
+      await load();
+      setMsg({ type: 'info', text: `Completado: ${total} videos reclasificados.` });
     } catch (e) { setMsg({ type: 'err', text: e.message }); }
     finally { setBusy(false); }
   }

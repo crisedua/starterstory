@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../db/supabase.js';
-import { classifyVideo, classifyAll, reclassifyAll } from '../services/classifier.js';
+import { classifyVideo, classifyAll, resetClassifications } from '../services/classifier.js';
 import { extractPainPointsFromVideos } from '../services/painPointExtractor.js';
 
 const router = Router();
@@ -101,12 +101,23 @@ router.post('/classify/video/:videoId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Procesa un batch de videos sin clasificar (o todos si force=true).
+// Devuelve { processed, remaining }; el frontend llama repetidamente
+// hasta que remaining = 0 — así cada call cabe en los 60s de Vercel.
 router.post('/classify/all', async (req, res) => {
   try {
     const force = req.query.force === 'true';
-    // Background-ish: respondemos rápido y dejamos correr.
-    classifyAll({ force }).catch((e) => console.error('classifyAll', e.message));
-    res.json({ ok: true, message: 'clasificación iniciada' });
+    const limit = Number(req.query.limit) || 5;
+    const r = await classifyAll({ force, limit });
+    res.json({ ok: true, ...r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Borra todas las clasificaciones (paso previo a una reclasificación masiva).
+router.post('/classify/reset', async (req, res) => {
+  try {
+    await resetClassifications();
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -117,14 +128,6 @@ router.post('/extract-from-videos', async (req, res) => {
     const replace = req.query.replace === 'true';
     const r = await extractPainPointsFromVideos({ replaceExtracted: replace });
     res.json({ ok: true, ...r });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Reclasificación masiva (llamar al cambiar pain points)
-router.post('/classify/reclassify-all', async (req, res) => {
-  try {
-    reclassifyAll().catch((e) => console.error('reclassifyAll', e.message));
-    res.json({ ok: true, message: 'reclasificación iniciada — borrando previas y reanalizando' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

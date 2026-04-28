@@ -82,20 +82,24 @@ export async function analyzeVideo(videoId, { force = false } = {}) {
   });
 }
 
-export async function analyzeAllUnanalyzed() {
-  // Trae videos sin análisis (left join no existe en supabase-js, usamos two-step)
+export async function analyzeAllUnanalyzed({ limit = 5 } = {}) {
   const { data: analyzed } = await supabase.from('video_analyses').select('video_id');
   const analyzedIds = new Set((analyzed || []).map((a) => a.video_id));
 
   const { data: videos } = await supabase
-    .from('videos').select('id').limit(200);
+    .from('videos').select('id').limit(500);
 
-  const pending = (videos || []).filter((v) => !analyzedIds.has(v.id)).slice(0, 50);
+  const pending = (videos || []).filter((v) => !analyzedIds.has(v.id));
+  const batch = pending.slice(0, limit);
 
   const results = [];
-  for (const r of pending) {
+  for (const r of batch) {
     try { await analyzeVideo(r.id); results.push({ id: r.id, ok: true }); }
     catch (e) { results.push({ id: r.id, ok: false, error: e.message }); }
   }
-  return results;
+  return {
+    processed: results.length,
+    remaining: pending.length - batch.length,
+    results,
+  };
 }

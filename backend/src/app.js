@@ -43,8 +43,9 @@ export function createApp() {
 
   app.post('/api/analyze/run', async (req, res) => {
     try {
-      const r = await analyzeAllUnanalyzed();
-      res.json({ ok: true, count: r.length, results: r });
+      const limit = Number(req.query.limit) || 5;
+      const r = await analyzeAllUnanalyzed({ limit });
+      res.json({ ok: true, ...r });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

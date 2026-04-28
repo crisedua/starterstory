@@ -66,8 +66,14 @@ router.put('/config/:channelId', async (req, res) => {
 
 router.post('/run/:channelId', async (req, res) => {
   const channelId = Number(req.params.channelId);
-  runScrape(channelId, 'manual').catch((e) => console.error('scrape error', e));
-  res.json({ ok: true, message: 'scraping iniciado' });
+  // AWAIT obligatorio: en Vercel Serverless, el contenedor muere apenas
+  // se envía la respuesta, así que no se puede dejar trabajo en background.
+  try {
+    const result = await runScrape(channelId, 'manual');
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.get('/runs/:id', async (req, res) => {

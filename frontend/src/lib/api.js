@@ -63,7 +63,7 @@ export const api = {
     return request(`/scraper/runs${q ? '?' + q : ''}`);
   },
 
-  analyzeAll: () => request('/analyze/run', { method: 'POST' }),
+  analyzeAll: (limit = 5) => request(`/analyze/run?limit=${limit}`, { method: 'POST' }),
 
   getRpmProfile: () => request('/rpm/profile'),
   saveRpmProfile: (data) => request('/rpm/profile', { method: 'POST', body: JSON.stringify(data) }),
@@ -79,10 +79,10 @@ export const api = {
   deletePainPoint: (id) => request(`/pain-points/${id}`, { method: 'DELETE' }),
   extractPainPoints: (replace = false) =>
     request(`/pain-points/extract-from-videos${replace ? '?replace=true' : ''}`, { method: 'POST' }),
-  classifyAllVideos: (force = false) =>
-    request(`/pain-points/classify/all${force ? '?force=true' : ''}`, { method: 'POST' }),
-  reclassifyAllVideos: () =>
-    request('/pain-points/classify/reclassify-all', { method: 'POST' }),
+  classifyAllVideos: (force = false, limit = 5) =>
+    request(`/pain-points/classify/all?force=${force}&limit=${limit}`, { method: 'POST' }),
+  resetClassifications: () =>
+    request('/pain-points/classify/reset', { method: 'POST' }),
   classifyVideo: (videoId, force = false) =>
     request(`/pain-points/classify/video/${videoId}${force ? '?force=true' : ''}`, { method: 'POST' }),
 };
