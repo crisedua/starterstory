@@ -16,6 +16,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/cron/:path*", "destination": "/api/cron/:path*" },
+    { "source": "/api/:path*", "destination": "/api/handler" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

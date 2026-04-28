@@ -1,5 +1,5 @@
-// Catch-all serverless function que delega al Express app.
-// Vercel mapea cualquier /api/* a este archivo.
+// Handler único para todas las rutas /api/* (excepto /api/cron/*).
+// vercel.json rewrites todo aquí; Express mantiene el routing real.
 import { createApp } from '../backend/src/app.js';
 
 let appInstance;
