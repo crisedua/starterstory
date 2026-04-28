@@ -15,11 +15,21 @@ export function createApp() {
   app.use(express.json({ limit: '10mb' }));
 
   app.get('/api/health', async (req, res) => {
+    // Detecta problemas de configuración antes de tocar la DB
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const where = process.env.VERCEL ? 'Vercel → Settings → Environment Variables' : 'backend/.env';
+      return res.status(500).json({
+        ok: false,
+        error: `Faltan SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY en ${where}.`,
+        config_missing: true,
+      });
+    }
     try {
       const { error } = await supabase.from('channels').select('id').limit(1);
-      res.json({ ok: !error, db: error ? error.message : 'ok', ts: Date.now() });
+      if (error) throw error;
+      res.json({ ok: true, ts: Date.now() });
     } catch (e) {
-      res.status(500).json({ ok: false, error: e.message });
+      res.status(500).json({ ok: false, error: 'No se pudo conectar a Supabase: ' + e.message });
     }
   });
 

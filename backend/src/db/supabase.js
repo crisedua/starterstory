@@ -1,23 +1,43 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let _client = null;
 
-if (!url || !serviceKey) {
-  console.warn('[supabase] SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY faltante. Configúralo en backend/.env');
+function ensureEnv() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    const where = process.env.VERCEL ? 'Vercel → Settings → Environment Variables' : 'backend/.env';
+    throw new Error(
+      `Backend mal configurado: SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY ` +
+      `no están definidas. Configúralas en ${where} y redeploya.`
+    );
+  }
+  if (!url.startsWith('https://')) {
+    throw new Error(`SUPABASE_URL inválida (${url}). Debe ser https://xxx.supabase.co`);
+  }
+  return { url, key };
 }
 
-// Cliente con service_role: bypass RLS, solo se usa en backend.
-export const supabase = createClient(url || 'http://localhost', serviceKey || 'placeholder', {
-  auth: { persistSession: false, autoRefreshToken: false },
+function buildClient() {
+  const { url, key } = ensureEnv();
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+// Proxy lazy: cualquier acceso crea el cliente. Si las env vars
+// faltan, lanza un error claro en vez de "fetch failed" críptico.
+export const supabase = new Proxy({}, {
+  get(_, prop) {
+    if (!_client) _client = buildClient();
+    const v = _client[prop];
+    return typeof v === 'function' ? v.bind(_client) : v;
+  },
 });
 
 export async function getSetting(key) {
   const { data, error } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', key)
-    .maybeSingle();
+    .from('app_settings').select('value').eq('key', key).maybeSingle();
   if (error) throw error;
   return data?.value ?? null;
 }
