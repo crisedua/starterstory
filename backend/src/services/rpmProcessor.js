@@ -115,6 +115,92 @@ Devuelve SOLO un JSON válido con esta forma exacta:
 
 Si un campo no se puede inferir, usa null o array vacío. Para capital_band: muy_bajo (<$1K), bajo ($1K-$10K), medio ($10K-$50K), alto (>$50K).`;
 
+// Sugiere acciones masivas personalizadas para el step M.
+// Toma R + P actuales del usuario + pain points + estrategias reales
+// del catálogo, y la IA produce acciones concretas alineadas a SU caso.
+const SUGGEST_ACTIONS_PROMPT = `Eres un coach de emprendimiento que ayuda a un solopreneur LATAM a definir su Massive Action Plan (M del RPM de Tony Robbins).
+
+Recibes:
+1. El RESULTADO que el usuario quiere lograr (R)
+2. Su PROPÓSITO (P) - por qué lo quiere
+3. Una lista de pain points reales del mercado LATAM que el usuario podría atacar
+4. Estrategias y herramientas que negocios reales (Starter Story) usaron para resolver problemas equivalentes
+
+Tu tarea: generar 8-12 acciones MASIVAS, CONCRETAS y EJECUTABLES que ESTE usuario específico podría tomar para llegar a su resultado. Las acciones deben:
+- Ser específicas al perfil del usuario (su R y P)
+- Drawing inspiration from real strategies del catálogo (no inventar genéricas)
+- Ser realistas para un solopreneur LATAM con recursos limitados
+- Cubrir distintos frentes: validación, construcción, distribución, monetización, hábitos
+
+Devuelve SOLO un JSON válido con esta forma exacta:
+{
+  "suggested_actions": [
+    {
+      "action": "acción concreta en una frase",
+      "category": "validacion | construccion | distribucion | monetizacion | habito | otro",
+      "leverage": "alto | medio | bajo",
+      "rationale": "1 frase corta de por qué esta acción es relevante PARA ESTE USUARIO"
+    }
+  ],
+  "first_24h_priority": "1-2 frases sobre las 2-3 acciones más importantes a tomar en las próximas 24 horas, dado el R y P del usuario"
+}
+
+Reglas:
+- Mínimo 8, máximo 12 acciones
+- Cada acción debe ser ejecutable mañana, no abstracta
+- Si el usuario menciona horas/semana o capital, respétalos`;
+
+export async function suggestActions(profileId) {
+  const { data: p } = await supabase
+    .from('rpm_profiles').select('*').eq('id', profileId).maybeSingle();
+  if (!p) throw new Error('perfil no encontrado');
+  if (!p.results_raw?.trim() || !p.purpose_raw?.trim()) {
+    throw new Error('Necesitas completar Results y Purpose antes de pedir sugerencias para Massive Action.');
+  }
+
+  const [{ data: painPoints }, { data: analyses }] = await Promise.all([
+    supabase.from('pain_points').select('id, title, category, description, severity').order('severity', { ascending: false }).limit(20),
+    supabase.from('video_analyses').select('business_name, business_model, key_strategies, tools_used'),
+  ]);
+
+  // Agregamos estrategias y tools (top más frecuentes)
+  const stratFreq = {};
+  const toolFreq = {};
+  for (const a of analyses || []) {
+    for (const s of (a.key_strategies || [])) {
+      const k = String(s).trim();
+      if (k) stratFreq[k] = (stratFreq[k] || 0) + 1;
+    }
+    for (const t of (a.tools_used || [])) {
+      const k = String(t).trim();
+      if (k) toolFreq[k] = (toolFreq[k] || 0) + 1;
+    }
+  }
+  const topStrats = Object.entries(stratFreq).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([s]) => s);
+  const topTools = Object.entries(toolFreq).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([s]) => s);
+
+  const userMsg = `RESULTS DEL USUARIO:
+${p.results_raw}
+
+PURPOSE DEL USUARIO:
+${p.purpose_raw}
+
+PAIN POINTS LATAM DISPONIBLES:
+${(painPoints || []).map((pp) => `- [${pp.category}] ${pp.title} (severidad ${pp.severity}/10): ${pp.description}`).join('\n')}
+
+ESTRATEGIAS REALES USADAS POR NEGOCIOS DEL CATÁLOGO:
+${topStrats.map((s) => `- ${s}`).join('\n')}
+
+HERRAMIENTAS COMUNES:
+${topTools.join(', ')}`;
+
+  return chatJson({
+    system: SUGGEST_ACTIONS_PROMPT,
+    user: userMsg,
+    maxTokens: 2500,
+  });
+}
+
 export async function processProfile(profileId) {
   const { data: p, error } = await supabase
     .from('rpm_profiles').select('*').eq('id', profileId).maybeSingle();

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../db/supabase.js';
-import { depthCheck, processProfile } from '../services/rpmProcessor.js';
+import { depthCheck, processProfile, suggestActions } from '../services/rpmProcessor.js';
 
 const router = Router();
 
@@ -79,6 +79,21 @@ router.post('/profile/process', async (req, res) => {
 
     const interpretation = await processProfile(p.id);
     res.json({ ok: true, interpretation });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Sugerir acciones masivas personalizadas: la IA mira R + P del usuario
+// y los pain points + estrategias del catálogo, y genera un brainstorm
+// específico para SU caso. Es un "ayuda a empezar", no reemplaza al input.
+router.post('/suggest-actions', async (req, res) => {
+  try {
+    const { data: p } = await supabase
+      .from('rpm_profiles').select('id, results_raw, purpose_raw')
+      .eq('user_label', 'default')
+      .order('id', { ascending: false }).limit(1).maybeSingle();
+    if (!p) return res.status(400).json({ error: 'No hay perfil. Guarda Results y Purpose primero.' });
+    const result = await suggestActions(p.id);
+    res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

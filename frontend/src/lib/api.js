@@ -71,6 +71,7 @@ export const api = {
     request('/rpm/depth-check', { method: 'POST', body: JSON.stringify({ step, answer }) }),
   processRpmProfile: () => request('/rpm/profile/process', { method: 'POST' }),
   resetRpmProfile: () => request('/rpm/profile/reset', { method: 'POST' }),
+  suggestRpmActions: () => request('/rpm/suggest-actions', { method: 'POST' }),
 
   getPainPoints: () => request('/pain-points'),
   getPainPoint: (id) => request(`/pain-points/${id}`),

@@ -18,20 +18,19 @@ export default function RpmWizard() {
   const [processing, setProcessing] = useState(false);
   const [msg, setMsg] = useState(null);
   const [painPoints, setPainPoints] = useState([]);
-  const [insights, setInsights] = useState({ top_strategies: [], top_tools: [], analyzed_count: 0 });
+  const [suggestions, setSuggestions] = useState(null);
+  const [suggesting, setSuggesting] = useState(false);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const [p, pp, ins] = await Promise.all([
+      const [p, pp] = await Promise.all([
         api.getRpmProfile(),
         api.getPainPoints().catch(() => []),
-        api.getActionInsights().catch(() => ({ top_strategies: [], top_tools: [], analyzed_count: 0 })),
       ]);
       setProfile(p);
       setPainPoints(pp || []);
-      setInsights(ins);
       if (p) {
         setForm({
           results_raw: p.results_raw || '',
@@ -84,8 +83,25 @@ export default function RpmWizard() {
     await api.resetRpmProfile();
     setForm({ results_raw: '', purpose_raw: '', massive_action_raw: '' });
     setDepth({});
+    setSuggestions(null);
     setProfile(null);
     setStep(0);
+  }
+
+  async function getSuggestions() {
+    setSuggesting(true); setMsg(null); setSuggestions(null);
+    try {
+      // Aseguramos que R y P estén guardados antes de pedir sugerencias
+      await saveDraft({ results_raw: form.results_raw, purpose_raw: form.purpose_raw });
+      const r = await api.suggestRpmActions();
+      setSuggestions(r);
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setSuggesting(false); }
+  }
+
+  function appendActionToMap(text) {
+    const sep = form.massive_action_raw && !form.massive_action_raw.endsWith('\n') ? '\n' : '';
+    setForm({ ...form, massive_action_raw: form.massive_action_raw + sep + '• ' + text });
   }
 
   return (
@@ -199,62 +215,13 @@ export default function RpmWizard() {
           onProcess={processWithAI}
           processing={processing}
           extraContext={
-            insights.analyzed_count > 0 && (
-              <div style={{
-                background: 'var(--bg-2)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: 12,
-                marginBottom: 12,
-              }}>
-                <div className="small muted" style={{ fontWeight: 600, marginBottom: 8, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Inspiración real desde {insights.analyzed_count} negocios analizados — copia/adapta lo que encaje
-                </div>
-
-                {painPoints.length > 0 && (
-                  <div style={{ marginBottom: 10 }}>
-                    <div className="small muted" style={{ marginBottom: 4, fontSize: 12 }}>Pain points que podrías atacar:</div>
-                    <div className="flex" style={{ flexWrap: 'wrap', gap: 4 }}>
-                      {painPoints.slice(0, 8).map((p) => (
-                        <span key={p.id} className="badge badge-accent" title={p.description}>
-                          {p.title} ({p.category})
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {insights.top_strategies.length > 0 && (
-                  <div style={{ marginBottom: 10 }}>
-                    <div className="small muted" style={{ marginBottom: 4, fontSize: 12 }}>Estrategias que usaron negocios similares:</div>
-                    <div className="flex" style={{ flexWrap: 'wrap', gap: 4 }}>
-                      {insights.top_strategies.slice(0, 12).map((s) => (
-                        <span key={s.label} className="badge">
-                          {s.label}{s.count > 1 && <span className="muted"> ×{s.count}</span>}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {insights.top_tools.length > 0 && (
-                  <div>
-                    <div className="small muted" style={{ marginBottom: 4, fontSize: 12 }}>Herramientas que usaron:</div>
-                    <div className="flex" style={{ flexWrap: 'wrap', gap: 4 }}>
-                      {insights.top_tools.slice(0, 12).map((t) => (
-                        <span key={t.label} className="badge">
-                          {t.label}{t.count > 1 && <span className="muted"> ×{t.count}</span>}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="small muted" style={{ marginTop: 8 }}>
-                  Estos son patrones reales de los videos que ya analizaste. Úsalos como semilla para tu brainstorm — abierto, no obligatorio.
-                </div>
-              </div>
-            )
+            <SuggestionsBlock
+              hasRP={!!(form.results_raw && form.purpose_raw)}
+              suggesting={suggesting}
+              suggestions={suggestions}
+              onSuggest={getSuggestions}
+              onAdd={appendActionToMap}
+            />
           }
         />
       )}
@@ -468,6 +435,92 @@ function Field({ label, value, wide }) {
     <div className="col" style={{ minWidth: wide ? 300 : 160, flex: wide ? '1 1 100%' : 1 }}>
       <label>{label}</label>
       <div>{value === null || value === undefined || value === '' ? <span className="muted">—</span> : String(value)}</div>
+    </div>
+  );
+}
+
+function SuggestionsBlock({ hasRP, suggesting, suggestions, onSuggest, onAdd }) {
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, var(--accent-soft), transparent)',
+      border: '1px solid rgba(167, 139, 250, 0.3)',
+      borderRadius: 'var(--radius)',
+      padding: 14,
+      marginBottom: 14,
+    }}>
+      <div className="between" style={{ marginBottom: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <strong style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            ✨ Generar acciones IA basadas en tu R y P
+          </strong>
+          <p className="small muted" style={{ margin: '4px 0 0' }}>
+            La IA cruza TU Results + TU Purpose con los pain points y estrategias del catálogo
+            para sugerir acciones específicas para tu caso. Después tú las copias, modificas o ignoras.
+          </p>
+        </div>
+        <button className="btn" disabled={suggesting || !hasRP} onClick={onSuggest}>
+          {suggesting ? 'Generando…' : suggestions ? 'Re-generar' : 'Generar sugerencias'}
+        </button>
+      </div>
+
+      {!hasRP && (
+        <p className="small muted" style={{ margin: 0 }}>
+          Completa primero los pasos R (Results) y P (Purpose) — sin ellos no se pueden personalizar las acciones.
+        </p>
+      )}
+
+      {suggestions && (
+        <div style={{ marginTop: 12 }}>
+          {suggestions.first_24h_priority && (
+            <div style={{
+              background: 'var(--bg-2)',
+              padding: 10,
+              borderRadius: 6,
+              marginBottom: 10,
+              borderLeft: '3px solid var(--accent)',
+            }}>
+              <div className="small muted" style={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                Prioridad próximas 24h
+              </div>
+              <div className="small">{suggestions.first_24h_priority}</div>
+            </div>
+          )}
+
+          {(suggestions.suggested_actions || []).map((s, i) => (
+            <div key={i} style={{
+              background: 'var(--bg-2)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: 10,
+              marginBottom: 6,
+              display: 'flex',
+              gap: 10,
+              alignItems: 'flex-start',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="flex" style={{ marginBottom: 4, flexWrap: 'wrap' }}>
+                  {s.category && <span className="badge">{s.category}</span>}
+                  {s.leverage && (
+                    <span className={`badge ${s.leverage === 'alto' ? 'badge-ok' : s.leverage === 'bajo' ? 'badge-warn' : ''}`}>
+                      leverage {s.leverage}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{s.action}</div>
+                {s.rationale && <div className="small muted" style={{ marginTop: 4 }}>{s.rationale}</div>}
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '4px 10px', fontSize: 11, flexShrink: 0 }}
+                onClick={() => onAdd(s.action)}
+                title="Añadir a tu Massive Action Plan abajo"
+              >
+                + añadir
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
