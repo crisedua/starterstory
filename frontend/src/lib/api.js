@@ -85,4 +85,36 @@ export const api = {
     request('/pain-points/classify/reset', { method: 'POST' }),
   classifyVideo: (videoId, force = false) =>
     request(`/pain-points/classify/video/${videoId}${force ? '?force=true' : ''}`, { method: 'POST' }),
+
+  // Soluciones
+  getSolutions: () => request('/solutions'),
+  getSolution: (id) => request(`/solutions/${id}`),
+  generateSolutions: (replace = true) =>
+    request(`/solutions/generate?replace=${replace}`, { method: 'POST' }),
+  deleteSolution: (id) => request(`/solutions/${id}`, { method: 'DELETE' }),
+
+  // MVT
+  getMvtValidations: () => request('/mvt'),
+  getMvtValidation: (id) => request(`/mvt/${id}`),
+  createMvtValidation: (solution_id) =>
+    request('/mvt', { method: 'POST', body: JSON.stringify({ solution_id }) }),
+  updateMvtValidation: (id, data) =>
+    request(`/mvt/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMvtValidation: (id) => request(`/mvt/${id}`, { method: 'DELETE' }),
+
+  addMvtInterview: (validationId, data) =>
+    request(`/mvt/${validationId}/interviews`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteMvtInterview: (id) => request(`/mvt/interviews/${id}`, { method: 'DELETE' }),
+
+  addMvtHypothesis: (validationId, data) =>
+    request(`/mvt/${validationId}/hypotheses`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMvtHypothesis: (id, data) =>
+    request(`/mvt/hypotheses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMvtHypothesis: (id) => request(`/mvt/hypotheses/${id}`, { method: 'DELETE' }),
+
+  addMvtTest: (hypId, data) =>
+    request(`/mvt/hypotheses/${hypId}/tests`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMvtTest: (id, data) =>
+    request(`/mvt/tests/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMvtTest: (id) => request(`/mvt/tests/${id}`, { method: 'DELETE' }),
 };

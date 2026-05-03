@@ -7,6 +7,8 @@ import videosRouter from './routes/videos.js';
 import scraperRouter from './routes/scraper.js';
 import rpmRouter from './routes/rpm.js';
 import painPointsRouter from './routes/painPoints.js';
+import solutionsRouter from './routes/solutions.js';
+import mvtRouter from './routes/mvt.js';
 import { analyzeAllUnanalyzed } from './services/aiAnalyzer.js';
 
 export function createApp() {
@@ -40,6 +42,8 @@ export function createApp() {
   app.use('/api/scraper', scraperRouter);
   app.use('/api/rpm', rpmRouter);
   app.use('/api/pain-points', painPointsRouter);
+  app.use('/api/solutions', solutionsRouter);
+  app.use('/api/mvt', mvtRouter);
 
   app.post('/api/analyze/run', async (req, res) => {
     try {
