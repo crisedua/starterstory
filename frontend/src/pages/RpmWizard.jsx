@@ -18,14 +18,20 @@ export default function RpmWizard() {
   const [processing, setProcessing] = useState(false);
   const [msg, setMsg] = useState(null);
   const [painPoints, setPainPoints] = useState([]);
+  const [insights, setInsights] = useState({ top_strategies: [], top_tools: [], analyzed_count: 0 });
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const [p, pp] = await Promise.all([api.getRpmProfile(), api.getPainPoints().catch(() => [])]);
+      const [p, pp, ins] = await Promise.all([
+        api.getRpmProfile(),
+        api.getPainPoints().catch(() => []),
+        api.getActionInsights().catch(() => ({ top_strategies: [], top_tools: [], analyzed_count: 0 })),
+      ]);
       setProfile(p);
       setPainPoints(pp || []);
+      setInsights(ins);
       if (p) {
         setForm({
           results_raw: p.results_raw || '',
@@ -192,6 +198,64 @@ export default function RpmWizard() {
           isLast
           onProcess={processWithAI}
           processing={processing}
+          extraContext={
+            insights.analyzed_count > 0 && (
+              <div style={{
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: 12,
+                marginBottom: 12,
+              }}>
+                <div className="small muted" style={{ fontWeight: 600, marginBottom: 8, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Inspiración real desde {insights.analyzed_count} negocios analizados — copia/adapta lo que encaje
+                </div>
+
+                {painPoints.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div className="small muted" style={{ marginBottom: 4, fontSize: 12 }}>Pain points que podrías atacar:</div>
+                    <div className="flex" style={{ flexWrap: 'wrap', gap: 4 }}>
+                      {painPoints.slice(0, 8).map((p) => (
+                        <span key={p.id} className="badge badge-accent" title={p.description}>
+                          {p.title} ({p.category})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {insights.top_strategies.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div className="small muted" style={{ marginBottom: 4, fontSize: 12 }}>Estrategias que usaron negocios similares:</div>
+                    <div className="flex" style={{ flexWrap: 'wrap', gap: 4 }}>
+                      {insights.top_strategies.slice(0, 12).map((s) => (
+                        <span key={s.label} className="badge">
+                          {s.label}{s.count > 1 && <span className="muted"> ×{s.count}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {insights.top_tools.length > 0 && (
+                  <div>
+                    <div className="small muted" style={{ marginBottom: 4, fontSize: 12 }}>Herramientas que usaron:</div>
+                    <div className="flex" style={{ flexWrap: 'wrap', gap: 4 }}>
+                      {insights.top_tools.slice(0, 12).map((t) => (
+                        <span key={t.label} className="badge">
+                          {t.label}{t.count > 1 && <span className="muted"> ×{t.count}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="small muted" style={{ marginTop: 8 }}>
+                  Estos son patrones reales de los videos que ya analizaste. Úsalos como semilla para tu brainstorm — abierto, no obligatorio.
+                </div>
+              </div>
+            )
+          }
         />
       )}
 

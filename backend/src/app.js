@@ -9,6 +9,7 @@ import rpmRouter from './routes/rpm.js';
 import painPointsRouter from './routes/painPoints.js';
 import solutionsRouter from './routes/solutions.js';
 import mvtRouter from './routes/mvt.js';
+import insightsRouter from './routes/insights.js';
 import { analyzeAllUnanalyzed } from './services/aiAnalyzer.js';
 
 export function createApp() {
@@ -44,6 +45,7 @@ export function createApp() {
   app.use('/api/pain-points', painPointsRouter);
   app.use('/api/solutions', solutionsRouter);
   app.use('/api/mvt', mvtRouter);
+  app.use('/api/insights', insightsRouter);
 
   app.post('/api/analyze/run', async (req, res) => {
     try {

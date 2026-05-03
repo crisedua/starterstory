@@ -95,6 +95,9 @@ export const api = {
     request(`/solutions/generate?replace=${replace}`, { method: 'POST' }),
   deleteSolution: (id) => request(`/solutions/${id}`, { method: 'DELETE' }),
 
+  // Insights (agregaciones para el wizard)
+  getActionInsights: () => request('/insights/actions'),
+
   // MVT
   getMvtValidations: () => request('/mvt'),
   getMvtValidation: (id) => request(`/mvt/${id}`),
