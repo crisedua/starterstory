@@ -17,13 +17,15 @@ export default function RpmWizard() {
   const [loading, setLoading] = useState({}); // por paso
   const [processing, setProcessing] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [painPoints, setPainPoints] = useState([]);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const p = await api.getRpmProfile();
+      const [p, pp] = await Promise.all([api.getRpmProfile(), api.getPainPoints().catch(() => [])]);
       setProfile(p);
+      setPainPoints(pp || []);
       if (p) {
         setForm({
           results_raw: p.results_raw || '',
@@ -34,6 +36,9 @@ export default function RpmWizard() {
       }
     } catch (e) { setMsg({ type: 'err', text: e.message }); }
   }
+
+  // Categorías reales del catálogo de pain points (deduplicadas, ordenadas)
+  const availableCategories = [...new Set(painPoints.map((p) => p.category))].sort();
 
   async function saveDraft(patch) {
     try { await api.saveRpmProfile(patch); }
@@ -97,11 +102,13 @@ export default function RpmWizard() {
             '¿Qué cifra exacta de ingresos mensuales quieres alcanzar (USD)?',
             '¿Para cuándo? (fecha o cantidad de meses)',
             '¿Cómo sabrás que lo lograste? (criterio de éxito)',
-            '¿Qué tipo de negocio? (saas, agencia, ecommerce, contenido, servicio…)',
-            '¿Desde dónde lo construyes? (país/ciudad)',
+            availableCategories.length > 0
+              ? `¿En qué área te gustaría operar? Categorías reales con pain points en este sistema: ${availableCategories.join(', ')}`
+              : '¿En qué área te gustaría operar? (Aún no hay pain points extraídos — ve a Pain Points y extráelos primero para ver tus opciones reales)',
+            '¿Desde dónde lo construyes? (país/ciudad LATAM — recuerda que el motor de soluciones adapta a contexto regional)',
             '¿Full-time o side project? Si es side, ¿cuántas horas a la semana?',
           ]}
-          example="Ej: 'Generar US$3.000/mes en ingresos recurrentes con un side project de 15 h/semana, basado en Santiago, Chile, que sea un SaaS B2B vertical antes de diciembre 2026. Sé que lo logré cuando cierro el cliente #20 a $150/mes.'"
+          example="Ej: 'Generar US$3.000/mes en ingresos recurrentes con un side project de 15 h/semana, basado en Santiago, Chile, atacando el área de saas-pyme antes de diciembre 2026. Sé que lo logré cuando cierro el cliente #20 a $150/mes.'"
           value={form.results_raw}
           onChange={(v) => setForm({ ...form, results_raw: v })}
           onCheck={() => checkDepth('R', form.results_raw)}
@@ -109,6 +116,30 @@ export default function RpmWizard() {
           depth={depth.R}
           onNext={() => setStep(2)}
           onPrev={() => setStep(0)}
+          extraContext={
+            availableCategories.length > 0 && (
+              <div style={{
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: 12,
+                marginBottom: 12,
+              }}>
+                <div className="small muted" style={{ fontWeight: 600, marginBottom: 6, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Áreas con pain points reales en tu sistema ({painPoints.length})
+                </div>
+                <div className="flex" style={{ flexWrap: 'wrap', gap: 6 }}>
+                  {availableCategories.map((cat) => {
+                    const count = painPoints.filter((p) => p.category === cat).length;
+                    return <span key={cat} className="badge badge-accent">{cat} ({count})</span>;
+                  })}
+                </div>
+                <div className="small muted" style={{ marginTop: 8 }}>
+                  Estas son las categorías que la IA ya identificó como problemas reales LATAM. Ataca una de estas para que el motor de soluciones tenga material para inspirarse.
+                </div>
+              </div>
+            )
+          }
         />
       )}
 
@@ -221,12 +252,14 @@ function Intro({ onStart, hasProfile, onReset }) {
 
 function StepCard({
   stepKey, title, intro, subQuestions, example, value, onChange,
-  onCheck, loading, depth, onNext, onPrev, isLast, onProcess, processing,
+  onCheck, loading, depth, onNext, onPrev, isLast, onProcess, processing, extraContext,
 }) {
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>{title}</h3>
       <p>{intro}</p>
+
+      {extraContext}
 
       <h4>Preguntas auxiliares (úsalas para profundizar)</h4>
       <ul className="small">
