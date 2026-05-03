@@ -36,6 +36,27 @@ export default function PainPoints() {
     finally { setExtracting(false); }
   }
 
+  async function cleanAndExtract() {
+    if (!confirm('Esto BORRA TODOS los pain points actuales (manuales + extraídos) y vuelve a extraer desde los videos analizados. ¿Continuar?')) return;
+    setExtracting(true); setMsg(null);
+    try {
+      await api.bulkDeletePainPoints('all');
+      const r = await api.extractPainPoints(false);
+      setMsg({ type: 'info', text: `Limpieza completa. ${r.extracted} pain points extraídos desde ${r.total_videos_analyzed} videos.` });
+      await load();
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setExtracting(false); }
+  }
+
+  async function deleteManuals() {
+    if (!confirm('¿Borrar TODOS los pain points manuales (los del seed original)?')) return;
+    try {
+      await api.bulkDeletePainPoints('manual');
+      await load();
+      setMsg({ type: 'info', text: 'Pain points manuales borrados.' });
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+  }
+
   async function classifyAll() {
     setBusy(true); setMsg(null);
     try {
@@ -135,7 +156,7 @@ export default function PainPoints() {
               clusteriza los similares y evalúa cuáles aplican al mercado LATAM con razonamiento.
             </p>
           </div>
-          <div className="flex">
+          <div className="flex" style={{ flexWrap: 'wrap' }}>
             <button className="btn" disabled={extracting} onClick={() => extract(false)}>
               {extracting
                 ? <><Icon name="spinner" size={14} className="spin" /> Extrayendo…</>
@@ -144,6 +165,16 @@ export default function PainPoints() {
             {stats.extracted > 0 && (
               <button className="btn btn-secondary" disabled={extracting} onClick={() => extract(true)}>
                 <Icon name="refresh" size={14} /> Re-extraer
+              </button>
+            )}
+            {stats.manual > 0 && stats.extracted === 0 && (
+              <button className="btn btn-secondary" disabled={extracting} onClick={cleanAndExtract}>
+                <Icon name="trash" size={14} /> Limpiar manuales y extraer
+              </button>
+            )}
+            {stats.manual > 0 && (
+              <button className="btn btn-ghost" disabled={extracting} onClick={deleteManuals}>
+                <Icon name="trash" size={14} /> Borrar manuales
               </button>
             )}
           </div>

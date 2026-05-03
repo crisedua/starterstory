@@ -89,6 +89,19 @@ router.delete('/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Bulk delete por fuente: ?source=manual | extracted | all
+router.delete('/', async (req, res) => {
+  try {
+    const source = req.query.source;
+    let q = supabase.from('pain_points').delete();
+    if (source && source !== 'all') q = q.eq('source', source);
+    else q = q.neq('id', 0);
+    const { error } = await q;
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // =========================================================
 // Clasificación
 // =========================================================
