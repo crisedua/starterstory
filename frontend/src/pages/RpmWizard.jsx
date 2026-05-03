@@ -219,6 +219,7 @@ export default function RpmWizard() {
               hasRP={!!(form.results_raw && form.purpose_raw)}
               suggesting={suggesting}
               suggestions={suggestions}
+              painPoints={painPoints}
               onSuggest={getSuggestions}
               onAdd={appendActionToMap}
             />
@@ -439,7 +440,8 @@ function Field({ label, value, wide }) {
   );
 }
 
-function SuggestionsBlock({ hasRP, suggesting, suggestions, onSuggest, onAdd }) {
+function SuggestionsBlock({ hasRP, suggesting, suggestions, painPoints, onSuggest, onAdd }) {
+  const ppById = Object.fromEntries((painPoints || []).map((p) => [p.id, p]));
   return (
     <div style={{
       background: 'linear-gradient(135deg, var(--accent-soft), transparent)',
@@ -486,39 +488,67 @@ function SuggestionsBlock({ hasRP, suggesting, suggestions, onSuggest, onAdd }) 
             </div>
           )}
 
-          {(suggestions.suggested_actions || []).map((s, i) => (
-            <div key={i} style={{
-              background: 'var(--bg-2)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: 10,
-              marginBottom: 6,
-              display: 'flex',
-              gap: 10,
-              alignItems: 'flex-start',
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="flex" style={{ marginBottom: 4, flexWrap: 'wrap' }}>
-                  {s.category && <span className="badge">{s.category}</span>}
-                  {s.leverage && (
-                    <span className={`badge ${s.leverage === 'alto' ? 'badge-ok' : s.leverage === 'bajo' ? 'badge-warn' : ''}`}>
-                      leverage {s.leverage}
-                    </span>
+          {(suggestions.suggested_actions || []).map((s, i) => {
+            const pp = s.based_on_pain_point_id ? ppById[s.based_on_pain_point_id] : null;
+            return (
+              <div key={i} style={{
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                padding: 10,
+                marginBottom: 6,
+                display: 'flex',
+                gap: 10,
+                alignItems: 'flex-start',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="flex" style={{ marginBottom: 4, flexWrap: 'wrap' }}>
+                    {s.category && <span className="badge">{s.category}</span>}
+                    {s.leverage && (
+                      <span className={`badge ${s.leverage === 'alto' ? 'badge-ok' : s.leverage === 'bajo' ? 'badge-warn' : ''}`}>
+                        leverage {s.leverage}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{s.action}</div>
+                  {s.rationale && <div className="small muted" style={{ marginTop: 4 }}>{s.rationale}</div>}
+
+                  {(pp || s.inspired_by_strategy) && (
+                    <div style={{
+                      marginTop: 8,
+                      paddingTop: 8,
+                      borderTop: '1px dashed var(--border)',
+                      fontSize: 11,
+                      color: 'var(--text-3)',
+                    }}>
+                      {pp && (
+                        <div>
+                          <strong style={{ color: 'var(--text-2)' }}>Pain point:</strong>{' '}
+                          <span className="badge badge-accent" style={{ fontSize: 10 }}>{pp.category}</span>{' '}
+                          {pp.title}
+                          {pp.source === 'extracted' && <span className="badge" style={{ fontSize: 10, marginLeft: 4 }}>extraído IA</span>}
+                        </div>
+                      )}
+                      {s.inspired_by_strategy && (
+                        <div style={{ marginTop: 2 }}>
+                          <strong style={{ color: 'var(--text-2)' }}>Estrategia inspiradora:</strong>{' '}
+                          <em>"{s.inspired_by_strategy}"</em>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{s.action}</div>
-                {s.rationale && <div className="small muted" style={{ marginTop: 4 }}>{s.rationale}</div>}
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: 11, flexShrink: 0 }}
+                  onClick={() => onAdd(s.action)}
+                  title="Añadir a tu Massive Action Plan abajo"
+                >
+                  + añadir
+                </button>
               </div>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: '4px 10px', fontSize: 11, flexShrink: 0 }}
-                onClick={() => onAdd(s.action)}
-                title="Añadir a tu Massive Action Plan abajo"
-              >
-                + añadir
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

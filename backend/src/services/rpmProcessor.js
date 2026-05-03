@@ -123,12 +123,16 @@ const SUGGEST_ACTIONS_PROMPT = `Eres un coach de emprendimiento que ayuda a un s
 Recibes:
 1. El RESULTADO que el usuario quiere lograr (R)
 2. Su PROPÓSITO (P) - por qué lo quiere
-3. Una lista de pain points reales del mercado LATAM que el usuario podría atacar
-4. Estrategias y herramientas que negocios reales (Starter Story) usaron para resolver problemas equivalentes
+3. Una lista de pain points reales del mercado LATAM que el usuario podría atacar (con id)
+4. Estrategias reales que negocios del canal Starter Story usaron para resolver problemas equivalentes
 
-Tu tarea: generar 8-12 acciones MASIVAS, CONCRETAS y EJECUTABLES que ESTE usuario específico podría tomar para llegar a su resultado. Las acciones deben:
+Tu tarea: generar 8-12 acciones MASIVAS, CONCRETAS y EJECUTABLES, CADA UNA EXPLÍCITAMENTE ANCLADA a:
+  - un pain point específico del catálogo (por id), Y
+  - una estrategia concreta de las que aparecen en el catálogo (citarla literal o casi literal)
+
+Las acciones deben:
 - Ser específicas al perfil del usuario (su R y P)
-- Drawing inspiration from real strategies del catálogo (no inventar genéricas)
+- Inspiradas en estrategias REALES del catálogo (no inventar genéricas)
 - Ser realistas para un solopreneur LATAM con recursos limitados
 - Cubrir distintos frentes: validación, construcción, distribución, monetización, hábitos
 
@@ -139,7 +143,9 @@ Devuelve SOLO un JSON válido con esta forma exacta:
       "action": "acción concreta en una frase",
       "category": "validacion | construccion | distribucion | monetizacion | habito | otro",
       "leverage": "alto | medio | bajo",
-      "rationale": "1 frase corta de por qué esta acción es relevante PARA ESTE USUARIO"
+      "based_on_pain_point_id": número (id real de la lista de pain points),
+      "inspired_by_strategy": "estrategia específica del catálogo (cita o paráfrasis cercana)",
+      "rationale": "1 frase corta de por qué esta acción es relevante PARA ESTE USUARIO específico, conectando R/P con el pain point"
     }
   ],
   "first_24h_priority": "1-2 frases sobre las 2-3 acciones más importantes a tomar en las próximas 24 horas, dado el R y P del usuario"
@@ -147,6 +153,7 @@ Devuelve SOLO un JSON válido con esta forma exacta:
 
 Reglas:
 - Mínimo 8, máximo 12 acciones
+- TODAS deben tener based_on_pain_point_id válido y inspired_by_strategy con sustancia
 - Cada acción debe ser ejecutable mañana, no abstracta
 - Si el usuario menciona horas/semana o capital, respétalos`;
 
