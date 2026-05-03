@@ -22,7 +22,7 @@ export async function chatJson({ system, user, maxTokens = 2000 }) {
   const client = await getClient();
   const resp = await client.chat.completions.create({
     model: MODEL,
-    max_tokens: maxTokens,
+    max_completion_tokens: maxTokens,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: system },
@@ -41,7 +41,7 @@ export async function chatText({ system, user, maxTokens = 2000 }) {
   const client = await getClient();
   const resp = await client.chat.completions.create({
     model: MODEL,
-    max_tokens: maxTokens,
+    max_completion_tokens: maxTokens,
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
