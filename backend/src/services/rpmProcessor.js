@@ -24,26 +24,26 @@ Devuelve SOLO un JSON con esta forma:
   P: `Evalúa esta respuesta a la pregunta "¿Por qué lo quieres?" del Rapid Planning Method de Tony Robbins.
 
 Sin un Purpose fuerte, las acciones no se sostienen. Una respuesta SUFICIENTEMENTE PROFUNDA debe ir más allá de lo superficial e incluir alguno de estos:
-1. Driver emocional concreto (independencia, demostrar algo, dejar un trabajo, ayudar a alguien)
-2. Beneficiarios además del usuario (familia, comunidad, clientes)
-3. Consecuencias de NO lograrlo (qué pierdes, qué dolor evitas)
-4. Cambio identitario (en quién te conviertes al lograrlo)
+1. Driver emocional concreto
+2. Beneficiarios además del usuario
+3. Consecuencias de NO lograrlo
+4. Cambio identitario
 
 Devuelve SOLO un JSON:
 {
   "is_deep_enough": boolean,
   "score": número 0-100,
   "missing": ["aspecto faltante 1"],
-  "follow_ups": ["pregunta para ahondar 1", "pregunta para ahondar 2"],
+  "follow_ups": ["pregunta para ahondar 1"],
   "feedback": "1-2 frases que empujen a profundizar"
 }`,
 
   M: `Evalúa esta respuesta a la pregunta "¿Qué acciones masivas tomarás?" del Rapid Planning Method de Tony Robbins.
 
 Una respuesta SUFICIENTEMENTE PROFUNDA debe incluir:
-1. Brainstorm amplio (mínimo 8-10 acciones distintas, no 2-3)
-2. Acciones concretas y ejecutables (no genéricas como "estudiar más")
-3. Recursos disponibles (tiempo, dinero, habilidades, contactos)
+1. Brainstorm amplio (mínimo 8-10 acciones distintas)
+2. Acciones concretas y ejecutables
+3. Recursos disponibles
 4. Restricciones reales
 5. Disposición a sacrificar algo
 
@@ -52,7 +52,7 @@ Devuelve SOLO un JSON:
   "is_deep_enough": boolean,
   "score": número 0-100,
   "missing": ["aspecto faltante 1"],
-  "follow_ups": ["pregunta 1", "pregunta 2"],
+  "follow_ups": ["pregunta 1"],
   "feedback": "1-2 frases"
 }`,
 };
@@ -61,29 +61,141 @@ export async function depthCheck(step, answer) {
   if (!['R', 'P', 'M'].includes(step)) throw new Error('paso inválido');
   if (!answer || answer.trim().length < 5) {
     return {
-      is_deep_enough: false,
-      score: 0,
-      missing: ['respuesta vacía o demasiado corta'],
-      follow_ups: ['Escribe al menos un párrafo con tu respuesta'],
-      feedback: 'Tu respuesta necesita más sustancia. No avances sin una respuesta real.',
+      is_deep_enough: false, score: 0, missing: ['respuesta vacía o demasiado corta'],
+      follow_ups: ['Escribe al menos un párrafo'],
+      feedback: 'Tu respuesta necesita más sustancia.',
     };
+  }
+  try { return await chatJson({ system: DEPTH_PROMPTS[step], user: answer, maxTokens: 800 }); }
+  catch (e) { return { is_deep_enough: false, score: 50, missing: [], follow_ups: [], feedback: e.message.slice(0, 300) }; }
+}
+
+const SUGGEST_ACTIONS_PROMPT = `Eres un coach de emprendimiento que ayuda a un solopreneur LATAM a definir su Massive Action Plan (M del RPM de Tony Robbins).
+
+Recibes:
+1. El RESULTADO (R) y PROPÓSITO (P) del usuario
+2. Una lista de pain points reales del mercado LATAM, CADA UNO con sus videos fuente (negocios reales del canal Starter Story que abordan ese problema), incluyendo las estrategias que cada video usó
+
+Tu tarea: generar 8-12 acciones MASIVAS, CONCRETAS y EJECUTABLES que ESTE usuario podría tomar. CADA acción debe estar EXPLÍCITAMENTE ANCLADA a:
+  - un pain_point_id específico
+  - un video_id específico de los que abordan ese pain point
+  - una estrategia citada de las que usó ese video
+
+Las acciones deben:
+- Ser específicas al perfil del usuario (su R y P)
+- Ser inspiradas en estrategias REALES de los videos del catálogo
+- Ser realistas para un solopreneur LATAM con recursos limitados
+- Cubrir distintos frentes: validación, construcción, distribución, monetización, hábitos
+
+Devuelve SOLO un JSON válido con esta forma exacta:
+{
+  "suggested_actions": [
+    {
+      "action": "acción concreta en una frase",
+      "category": "validacion | construccion | distribucion | monetizacion | habito | otro",
+      "leverage": "alto | medio | bajo",
+      "pain_point_id": número (id real),
+      "video_id": número (id real del video que inspira),
+      "inspired_by_strategy": "estrategia específica del video citada o parafraseada",
+      "rationale": "1 frase de por qué esta acción es relevante para el usuario, conectando R/P con el pain point"
+    }
+  ],
+  "first_24h_priority": "1-2 frases sobre las 2-3 acciones más importantes para las próximas 24 horas"
+}
+
+Reglas estrictas:
+- Mínimo 8, máximo 12 acciones
+- TODAS deben tener pain_point_id Y video_id válidos (de la lista que te paso)
+- Cada inspired_by_strategy debe venir de las estrategias del video citado, no inventada
+- No incluyas markdown ni texto fuera del JSON`;
+
+export async function suggestActions(profileId) {
+  const { data: p } = await supabase
+    .from('rpm_profiles').select('*').eq('id', profileId).maybeSingle();
+  if (!p) throw new Error('perfil no encontrado');
+  if (!p.results_raw?.trim() || !p.purpose_raw?.trim()) {
+    throw new Error('Necesitas completar Results y Purpose antes de pedir sugerencias para Massive Action.');
   }
 
-  try {
-    return await chatJson({
-      system: DEPTH_PROMPTS[step],
-      user: answer,
-      maxTokens: 800,
-    });
-  } catch (e) {
-    return {
-      is_deep_enough: false,
-      score: 50,
-      missing: [],
-      follow_ups: [],
-      feedback: e.message.slice(0, 300),
-    };
+  // Cargar pain points + clasificaciones (videos fuente con sus estrategias)
+  const { data: painPoints } = await supabase
+    .from('pain_points')
+    .select('id, title, category, description, severity')
+    .order('severity', { ascending: false })
+    .limit(15);
+
+  if (!painPoints || painPoints.length === 0) {
+    throw new Error('No hay pain points. Extrae pain points desde los videos primero.');
   }
+
+  const ppIds = painPoints.map((pp) => pp.id);
+  const { data: classifications } = await supabase
+    .from('video_pain_point_classifications')
+    .select('pain_point_id, video_id, videos(id, title, url, video_analyses(business_name, key_strategies, tools_used))')
+    .in('pain_point_id', ppIds)
+    .order('relevance_score', { ascending: false });
+
+  // Top 2 videos por pain point
+  const videosByPain = {};
+  for (const c of classifications || []) {
+    if (!videosByPain[c.pain_point_id]) videosByPain[c.pain_point_id] = [];
+    if (videosByPain[c.pain_point_id].length < 2 && c.videos) {
+      videosByPain[c.pain_point_id].push(c.videos);
+    }
+  }
+
+  const ppContext = painPoints
+    .filter((pp) => videosByPain[pp.id]?.length > 0)
+    .map((pp) => {
+      const videos = videosByPain[pp.id].map((v) => {
+        const a = v.video_analyses?.[0] || {};
+        const strats = (a.key_strategies || []).slice(0, 4).map((s) => `      • ${s}`).join('\n');
+        return `   video_id=${v.id} | "${a.business_name || v.title?.slice(0, 50)}"\n     Estrategias:\n${strats || '      (sin estrategias listadas)'}`;
+      }).join('\n');
+      return `pain_point_id=${pp.id} | [${pp.category}] ${pp.title} (severidad ${pp.severity}/10)\n  Descripción: ${pp.description}\n  Videos fuente:\n${videos}`;
+    })
+    .join('\n\n');
+
+  if (!ppContext) {
+    throw new Error('No hay pain points con videos clasificados. Extrae pain points (que crea las clasificaciones automáticamente) o ejecuta "Clasificar pendientes" en /pain-points.');
+  }
+
+  const userMsg = `RESULTS DEL USUARIO:
+${p.results_raw}
+
+PURPOSE DEL USUARIO:
+${p.purpose_raw}
+
+PAIN POINTS LATAM CON SUS VIDEOS FUENTE Y ESTRATEGIAS:
+
+${ppContext}`;
+
+  const result = await chatJson({
+    system: SUGGEST_ACTIONS_PROMPT,
+    user: userMsg,
+    maxTokens: 3000,
+  });
+
+  // Adjuntar metadata de pain points y videos al response para que el frontend
+  // pueda renderizar nombres reales sin tener que pedirlos por separado
+  const ppMeta = Object.fromEntries(painPoints.map((pp) => [pp.id, pp]));
+  const videoMeta = {};
+  for (const list of Object.values(videosByPain)) {
+    for (const v of list) {
+      videoMeta[v.id] = {
+        id: v.id,
+        title: v.title,
+        url: v.url,
+        business_name: v.video_analyses?.[0]?.business_name,
+      };
+    }
+  }
+
+  return {
+    ...result,
+    pain_points_used: ppMeta,
+    videos_used: videoMeta,
+  };
 }
 
 const PROCESS_PROMPT = `Eres un consultor de negocios que recibe un perfil RPM (Rapid Planning Method de Tony Robbins) de un emprendedor LATAM.
@@ -100,113 +212,20 @@ Devuelve SOLO un JSON válido con esta forma exacta:
   "weekly_hours_available": número o null,
   "capital_available_usd": número o null,
   "capital_band": "muy_bajo | bajo | medio | alto",
-  "skills": ["habilidad 1", "habilidad 2"],
-  "resources": ["recurso disponible 1"],
-  "constraints": ["restricción 1", "restricción 2"],
+  "skills": ["habilidad 1"],
+  "resources": ["recurso 1"],
+  "constraints": ["restricción 1"],
   "business_type_preference": "saas | marketplace | ecommerce | agencia | contenido | servicio | fisico | otro",
-  "preferred_industries": ["industria 1", "industria 2"],
-  "willing_to_sacrifice": ["lo que está dispuesto a sacrificar"],
-  "emotional_drivers": ["driver 1", "driver 2"],
-  "location": "país o ciudad si se menciona",
+  "preferred_industries": ["industria 1"],
+  "willing_to_sacrifice": ["lo que sacrifica"],
+  "emotional_drivers": ["driver 1"],
+  "location": "país o ciudad",
   "fulltime_or_side": "fulltime | side | ambos | no_especificado",
   "risk_tolerance": "baja | media | alta",
-  "interests_categories": ["fintech", "edtech", "logistica", "salud", "agro", "gobierno", "etc."]
+  "interests_categories": ["fintech", "edtech", "etc."]
 }
 
 Si un campo no se puede inferir, usa null o array vacío. Para capital_band: muy_bajo (<$1K), bajo ($1K-$10K), medio ($10K-$50K), alto (>$50K).`;
-
-// Sugiere acciones masivas personalizadas para el step M.
-// Toma R + P actuales del usuario + pain points + estrategias reales
-// del catálogo, y la IA produce acciones concretas alineadas a SU caso.
-const SUGGEST_ACTIONS_PROMPT = `Eres un coach de emprendimiento que ayuda a un solopreneur LATAM a definir su Massive Action Plan (M del RPM de Tony Robbins).
-
-Recibes:
-1. El RESULTADO que el usuario quiere lograr (R)
-2. Su PROPÓSITO (P) - por qué lo quiere
-3. Una lista de pain points reales del mercado LATAM que el usuario podría atacar (con id)
-4. Estrategias reales que negocios del canal Starter Story usaron para resolver problemas equivalentes
-
-Tu tarea: generar 8-12 acciones MASIVAS, CONCRETAS y EJECUTABLES, CADA UNA EXPLÍCITAMENTE ANCLADA a:
-  - un pain point específico del catálogo (por id), Y
-  - una estrategia concreta de las que aparecen en el catálogo (citarla literal o casi literal)
-
-Las acciones deben:
-- Ser específicas al perfil del usuario (su R y P)
-- Inspiradas en estrategias REALES del catálogo (no inventar genéricas)
-- Ser realistas para un solopreneur LATAM con recursos limitados
-- Cubrir distintos frentes: validación, construcción, distribución, monetización, hábitos
-
-Devuelve SOLO un JSON válido con esta forma exacta:
-{
-  "suggested_actions": [
-    {
-      "action": "acción concreta en una frase",
-      "category": "validacion | construccion | distribucion | monetizacion | habito | otro",
-      "leverage": "alto | medio | bajo",
-      "based_on_pain_point_id": número (id real de la lista de pain points),
-      "inspired_by_strategy": "estrategia específica del catálogo (cita o paráfrasis cercana)",
-      "rationale": "1 frase corta de por qué esta acción es relevante PARA ESTE USUARIO específico, conectando R/P con el pain point"
-    }
-  ],
-  "first_24h_priority": "1-2 frases sobre las 2-3 acciones más importantes a tomar en las próximas 24 horas, dado el R y P del usuario"
-}
-
-Reglas:
-- Mínimo 8, máximo 12 acciones
-- TODAS deben tener based_on_pain_point_id válido y inspired_by_strategy con sustancia
-- Cada acción debe ser ejecutable mañana, no abstracta
-- Si el usuario menciona horas/semana o capital, respétalos`;
-
-export async function suggestActions(profileId) {
-  const { data: p } = await supabase
-    .from('rpm_profiles').select('*').eq('id', profileId).maybeSingle();
-  if (!p) throw new Error('perfil no encontrado');
-  if (!p.results_raw?.trim() || !p.purpose_raw?.trim()) {
-    throw new Error('Necesitas completar Results y Purpose antes de pedir sugerencias para Massive Action.');
-  }
-
-  const [{ data: painPoints }, { data: analyses }] = await Promise.all([
-    supabase.from('pain_points').select('id, title, category, description, severity').order('severity', { ascending: false }).limit(20),
-    supabase.from('video_analyses').select('business_name, business_model, key_strategies, tools_used'),
-  ]);
-
-  // Agregamos estrategias y tools (top más frecuentes)
-  const stratFreq = {};
-  const toolFreq = {};
-  for (const a of analyses || []) {
-    for (const s of (a.key_strategies || [])) {
-      const k = String(s).trim();
-      if (k) stratFreq[k] = (stratFreq[k] || 0) + 1;
-    }
-    for (const t of (a.tools_used || [])) {
-      const k = String(t).trim();
-      if (k) toolFreq[k] = (toolFreq[k] || 0) + 1;
-    }
-  }
-  const topStrats = Object.entries(stratFreq).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([s]) => s);
-  const topTools = Object.entries(toolFreq).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([s]) => s);
-
-  const userMsg = `RESULTS DEL USUARIO:
-${p.results_raw}
-
-PURPOSE DEL USUARIO:
-${p.purpose_raw}
-
-PAIN POINTS LATAM DISPONIBLES:
-${(painPoints || []).map((pp) => `- [${pp.category}] ${pp.title} (severidad ${pp.severity}/10): ${pp.description}`).join('\n')}
-
-ESTRATEGIAS REALES USADAS POR NEGOCIOS DEL CATÁLOGO:
-${topStrats.map((s) => `- ${s}`).join('\n')}
-
-HERRAMIENTAS COMUNES:
-${topTools.join(', ')}`;
-
-  return chatJson({
-    system: SUGGEST_ACTIONS_PROMPT,
-    user: userMsg,
-    maxTokens: 2500,
-  });
-}
 
 export async function processProfile(profileId) {
   const { data: p, error } = await supabase

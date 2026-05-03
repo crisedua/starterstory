@@ -489,7 +489,8 @@ function SuggestionsBlock({ hasRP, suggesting, suggestions, painPoints, onSugges
           )}
 
           {(suggestions.suggested_actions || []).map((s, i) => {
-            const pp = s.based_on_pain_point_id ? ppById[s.based_on_pain_point_id] : null;
+            const pp = s.pain_point_id ? (suggestions.pain_points_used?.[s.pain_point_id] || ppById[s.pain_point_id]) : null;
+            const video = s.video_id ? suggestions.videos_used?.[s.video_id] : null;
             return (
               <div key={i} style={{
                 background: 'var(--bg-2)',
@@ -513,25 +514,38 @@ function SuggestionsBlock({ hasRP, suggesting, suggestions, painPoints, onSugges
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{s.action}</div>
                   {s.rationale && <div className="small muted" style={{ marginTop: 4 }}>{s.rationale}</div>}
 
-                  {(pp || s.inspired_by_strategy) && (
+                  {(pp || video || s.inspired_by_strategy) && (
                     <div style={{
                       marginTop: 8,
                       paddingTop: 8,
                       borderTop: '1px dashed var(--border)',
                       fontSize: 11,
                       color: 'var(--text-3)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 3,
                     }}>
                       {pp && (
                         <div>
-                          <strong style={{ color: 'var(--text-2)' }}>Pain point:</strong>{' '}
+                          <strong style={{ color: 'var(--text-2)' }}>📍 Pain point:</strong>{' '}
                           <span className="badge badge-accent" style={{ fontSize: 10 }}>{pp.category}</span>{' '}
                           {pp.title}
-                          {pp.source === 'extracted' && <span className="badge" style={{ fontSize: 10, marginLeft: 4 }}>extraído IA</span>}
+                        </div>
+                      )}
+                      {video && (
+                        <div>
+                          <strong style={{ color: 'var(--text-2)' }}>🎬 Video fuente:</strong>{' '}
+                          <a href={`/videos/${video.id}`} target="_blank" rel="noreferrer">
+                            {video.business_name || video.title?.slice(0, 60)}
+                          </a>
+                          {video.url && (
+                            <> · <a href={video.url} target="_blank" rel="noreferrer">YouTube ↗</a></>
+                          )}
                         </div>
                       )}
                       {s.inspired_by_strategy && (
-                        <div style={{ marginTop: 2 }}>
-                          <strong style={{ color: 'var(--text-2)' }}>Estrategia inspiradora:</strong>{' '}
+                        <div>
+                          <strong style={{ color: 'var(--text-2)' }}>💡 Estrategia:</strong>{' '}
                           <em>"{s.inspired_by_strategy}"</em>
                         </div>
                       )}
