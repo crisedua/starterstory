@@ -1,24 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { supabase, getSetting } from '../db/supabase.js';
-
-async function getClient() {
-  const key = (await getSetting('anthropic_api_key')) || process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY no configurado.');
-  return new Anthropic({ apiKey: key });
-}
-
-const MODEL = 'claude-sonnet-4-6';
-
-function extractJson(text) {
-  const m = text.match(/\{[\s\S]*\}/);
-  return m ? m[0] : text;
-}
-
-// =========================================================
-// Depth check: empuja al usuario a profundizar si la respuesta
-// es vaga. Una respuesta como "quiero ganar dinero" debe ser
-// rechazada con preguntas específicas.
-// =========================================================
+import { supabase } from '../db/supabase.js';
+import { chatJson } from './llm.js';
 
 const DEPTH_PROMPTS = {
   R: `Evalúa esta respuesta a la pregunta "¿Qué quieres lograr?" del Rapid Planning Method de Tony Robbins.
@@ -88,22 +69,22 @@ export async function depthCheck(step, answer) {
     };
   }
 
-  const client = await getClient();
-  const resp = await client.messages.create({
-    model: MODEL,
-    max_tokens: 800,
-    system: DEPTH_PROMPTS[step],
-    messages: [{ role: 'user', content: answer }],
-  });
-
-  const text = resp.content?.[0]?.text || '{}';
-  try { return JSON.parse(extractJson(text)); }
-  catch { return { is_deep_enough: false, score: 50, missing: [], follow_ups: [], feedback: text.slice(0, 300) }; }
+  try {
+    return await chatJson({
+      system: DEPTH_PROMPTS[step],
+      user: answer,
+      maxTokens: 800,
+    });
+  } catch (e) {
+    return {
+      is_deep_enough: false,
+      score: 50,
+      missing: [],
+      follow_ups: [],
+      feedback: e.message.slice(0, 300),
+    };
+  }
 }
-
-// =========================================================
-// Procesamiento final: extrae estructura del perfil completo.
-// =========================================================
 
 const PROCESS_PROMPT = `Eres un consultor de negocios que recibe un perfil RPM (Rapid Planning Method de Tony Robbins) de un emprendedor LATAM.
 
@@ -117,7 +98,7 @@ Devuelve SOLO un JSON válido con esta forma exacta:
   "time_horizon_months": número (en cuántos meses quiere lograrlo),
   "monthly_revenue_target_usd": número o null,
   "weekly_hours_available": número o null,
-  "capital_available_usd": número o null (capital inicial disponible),
+  "capital_available_usd": número o null,
   "capital_band": "muy_bajo | bajo | medio | alto",
   "skills": ["habilidad 1", "habilidad 2"],
   "resources": ["recurso disponible 1"],
@@ -132,7 +113,7 @@ Devuelve SOLO un JSON válido con esta forma exacta:
   "interests_categories": ["fintech", "edtech", "logistica", "salud", "agro", "gobierno", "etc."]
 }
 
-Si un campo no se puede inferir, usa null o array vacío. Para capital_band usa: muy_bajo (<$1K), bajo ($1K-$10K), medio ($10K-$50K), alto (>$50K). NO incluyas markdown ni explicaciones, solo el JSON.`;
+Si un campo no se puede inferir, usa null o array vacío. Para capital_band: muy_bajo (<$1K), bajo ($1K-$10K), medio ($10K-$50K), alto (>$50K).`;
 
 export async function processProfile(profileId) {
   const { data: p, error } = await supabase
@@ -149,20 +130,11 @@ ${p.purpose_raw || '(vacío)'}
 MASSIVE ACTION PLAN:
 ${p.massive_action_raw || '(vacío)'}`;
 
-  const client = await getClient();
-  const resp = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2000,
+  const parsed = await chatJson({
     system: PROCESS_PROMPT,
-    messages: [{ role: 'user', content }],
+    user: content,
+    maxTokens: 2000,
   });
-
-  const text = resp.content?.[0]?.text || '{}';
-  let parsed;
-  try { parsed = JSON.parse(extractJson(text)); }
-  catch (e) {
-    throw new Error('La IA no devolvió un JSON válido. Intenta de nuevo. Respuesta: ' + text.slice(0, 200));
-  }
 
   await supabase.from('rpm_profiles').update({
     ai_interpretation: parsed,

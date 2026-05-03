@@ -1,15 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { supabase, getSetting } from '../db/supabase.js';
-
-async function getClient() {
-  const key = (await getSetting('anthropic_api_key')) || process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY no configurado.');
-  return new Anthropic({ apiKey: key });
-}
-
-// Haiku 4.5 es ~5x más rápido que Sonnet y suficiente para clusterización.
-// Necesario para caber en los 60s de Vercel.
-const MODEL = 'claude-haiku-4-5-20251001';
+import { supabase } from '../db/supabase.js';
+import { chatJson } from './llm.js';
 
 const SYSTEM_PROMPT = `Eres un consultor que analiza emprendimientos de Starter Story para extraer pain points reales que esos negocios resuelven, y evaluar si aplican a LATAM.
 
@@ -30,15 +20,10 @@ Para cada pain point evalúa:
 - evidence_hypothesis: array de {source_org, claim} con orgs reales (BID, CEPAL, Banco Mundial, FAO, OECD, OMS, Statista). NO inventes URLs.
 - adjustments_for_latam: array de ajustes (medios de pago, conectividad, regulación, idioma)
 
-Devuelve SOLO JSON:
+Devuelve SOLO un JSON válido con esta forma exacta:
 {"pain_points":[{"title":"","category":"","description":"","source_video_ids":[],"applies_to_latam":true,"severity_latam":7,"latam_reasoning":"","evidence_hypothesis":[{"source_org":"","claim":""}],"adjustments_for_latam":[""]}]}
 
-Reglas: mínimo 6, máximo 12. Solo applies_to_latam=true. NO markdown.`;
-
-function extractJson(text) {
-  const m = text.match(/\{[\s\S]*\}/);
-  return m ? m[0] : text;
-}
+Reglas: mínimo 6, máximo 12. Solo applies_to_latam=true.`;
 
 function truncate(s, n) {
   if (!s) return '';
@@ -54,8 +39,6 @@ export async function extractPainPointsFromVideos({ replaceExtracted = false } =
     throw new Error('No hay videos analizados. Ve a /videos y pulsa "Analizar pendientes" primero.');
   }
 
-  // Resumen compacto: limitamos cada campo para que el prompt quepa
-  // y la IA procese en menos tiempo (60s budget de Vercel).
   const businesses = analyses.map((a) => ({
     id: a.video_id,
     name: a.business_name || a.videos?.title?.slice(0, 50) || `Video ${a.video_id}`,
@@ -70,18 +53,11 @@ export async function extractPainPointsFromVideos({ replaceExtracted = false } =
     ).join('\n\n')
   }`;
 
-  const client = await getClient();
-  const resp = await client.messages.create({
-    model: MODEL,
-    max_tokens: 3500,
+  const parsed = await chatJson({
     system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userMsg }],
+    user: userMsg,
+    maxTokens: 3500,
   });
-
-  const text = resp.content?.[0]?.text || '{}';
-  let parsed;
-  try { parsed = JSON.parse(extractJson(text)); }
-  catch { throw new Error('La IA no devolvió JSON válido. Respuesta cruda: ' + text.slice(0, 300)); }
 
   const list = (parsed.pain_points || []).filter((p) => p.applies_to_latam);
   if (list.length === 0) throw new Error('La IA no extrajo ningún pain point aplicable a LATAM.');

@@ -4,7 +4,7 @@ import { supabaseConfigured } from '../lib/supabase.js';
 
 export default function Settings() {
   const [data, setData] = useState({});
-  const [form, setForm] = useState({ apify_token: '', anthropic_api_key: '' });
+  const [form, setForm] = useState({ apify_token: '', openai_api_key: '' });
   const [msg, setMsg] = useState(null);
 
   const load = () => api.getSettings().then(setData).catch((e) => setMsg({ type: 'err', text: e.message }));
@@ -16,9 +16,9 @@ export default function Settings() {
     try {
       const payload = {};
       if (form.apify_token) payload.apify_token = form.apify_token;
-      if (form.anthropic_api_key) payload.anthropic_api_key = form.anthropic_api_key;
+      if (form.openai_api_key) payload.openai_api_key = form.openai_api_key;
       await api.saveSettings(payload);
-      setForm({ apify_token: '', anthropic_api_key: '' });
+      setForm({ apify_token: '', openai_api_key: '' });
       await load();
       setMsg({ type: 'info', text: 'Guardado correctamente.' });
     } catch (e) {
@@ -70,19 +70,19 @@ export default function Settings() {
           />
         </div>
 
-        <h3>Anthropic</h3>
+        <h3>OpenAI</h3>
         <p className="small muted">
-          Necesario para análisis IA, clasificación y motor de soluciones. Estado: {data.anthropic_api_key_set
-            ? <span className="badge badge-ok">configurado ({data.anthropic_api_key})</span>
+          Necesario para análisis IA, clasificación y motor de soluciones (modelo: <code>gpt-5.4-mini</code>). Estado: {data.openai_api_key_set
+            ? <span className="badge badge-ok">configurado ({data.openai_api_key})</span>
             : <span className="badge badge-warn">no configurado</span>}
         </p>
         <div className="field">
-          <label>ANTHROPIC_API_KEY</label>
+          <label>OPENAI_API_KEY</label>
           <input
             type="password"
-            placeholder="sk-ant-..."
-            value={form.anthropic_api_key}
-            onChange={(e) => setForm({ ...form, anthropic_api_key: e.target.value })}
+            placeholder="sk-..."
+            value={form.openai_api_key}
+            onChange={(e) => setForm({ ...form, openai_api_key: e.target.value })}
           />
         </div>
 

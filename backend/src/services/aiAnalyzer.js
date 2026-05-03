@@ -1,13 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { supabase, getSetting } from '../db/supabase.js';
-
-async function getClient() {
-  const key = (await getSetting('anthropic_api_key')) || process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY no configurado.');
-  return new Anthropic({ apiKey: key });
-}
-
-const MODEL = 'claude-haiku-4-5-20251001';
+import { supabase } from '../db/supabase.js';
+import { chatJson } from './llm.js';
 
 const ANALYSIS_PROMPT = `Eres un analista de negocios. Vas a recibir el título, descripción y (si existe) transcripción de un video del canal "Starter Story" donde un emprendedor cuenta su historia. Tu tarea es extraer datos estructurados.
 
@@ -25,12 +17,7 @@ Devuelve SOLO un JSON válido con esta forma exacta:
   "summary": "resumen narrativo de 3-5 frases"
 }
 
-Si no hay suficiente información para un campo, usa null o un array vacío. NO incluyas markdown, NO incluyas \`\`\`json, solo el objeto.`;
-
-function extractJson(text) {
-  const m = text.match(/\{[\s\S]*\}/);
-  return m ? m[0] : text;
-}
+Si no hay suficiente información para un campo, usa null o un array vacío.`;
 
 export async function analyzeVideo(videoId, { force = false } = {}) {
   const { data: v, error: vErr } = await supabase
@@ -54,18 +41,12 @@ export async function analyzeVideo(videoId, { force = false } = {}) {
     t?.transcript ? `TRANSCRIPCIÓN:\n${t.transcript.slice(0, 12000)}` : '(sin transcripción)',
   ].join('\n\n');
 
-  const client = await getClient();
-  const resp = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1500,
-    system: ANALYSIS_PROMPT,
-    messages: [{ role: 'user', content }],
-  });
-
-  const text = resp.content?.[0]?.text || '{}';
-  let parsed = {};
-  try { parsed = JSON.parse(extractJson(text)); }
-  catch { parsed = { summary: text.slice(0, 500) }; }
+  let parsed;
+  try {
+    parsed = await chatJson({ system: ANALYSIS_PROMPT, user: content, maxTokens: 1500 });
+  } catch (e) {
+    parsed = { summary: e.message.slice(0, 500) };
+  }
 
   await supabase.from('video_analyses').insert({
     video_id: videoId,

@@ -1,13 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { supabase, getSetting } from '../db/supabase.js';
-
-async function getClient() {
-  const key = (await getSetting('anthropic_api_key')) || process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY no configurado.');
-  return new Anthropic({ apiKey: key });
-}
-
-const MODEL = 'claude-sonnet-4-6';
+import { supabase } from '../db/supabase.js';
+import { chatJson } from './llm.js';
 
 const SYSTEM_PROMPT = `Eres un consultor que ayuda a un emprendedor LATAM a identificar soluciones de negocio viables, cruzando tres fuentes de información:
 
@@ -20,7 +12,7 @@ Tu tarea: generar EXACTAMENTE 4 propuestas de solución que cumplan TODAS estas 
 A. Resuelven un pain point LATAM específico (referencia explícita por id).
 B. Inspiradas (NO copiadas) en 1-2 negocios reales del catálogo (referencia por video_id).
 C. Adaptadas al contexto LATAM: medios de pago locales (transferencias, billeteras, cash), conectividad, regulación, idioma, hábitos culturales, nivel de digitalización.
-D. Alineadas con TU RPM: el motor sabe tu capital, horas/semana, habilidades, drivers emocionales y meta de ingresos. NO propongas algo imposible (ej: si tu capital es $500, no propongas algo que requiere $100K).
+D. Alineadas con TU RPM: el motor sabe tu capital, horas/semana, habilidades, drivers emocionales y meta de ingresos. NO propongas algo imposible.
 E. Con dificultad calificada (baja, media o alta) basada en capital, habilidades y complejidad técnica.
 F. Con un fit_score 0-100 que combine: severidad del pain point + alineación RPM + viabilidad de implementación.
 
@@ -30,9 +22,9 @@ Devuelve SOLO un JSON válido con esta forma exacta:
     {
       "title": "string corto y claro",
       "description": "2-4 frases: qué es la solución y cómo entrega valor",
-      "pain_point_id": número (id real de la lista de pain points),
+      "pain_point_id": número (id real),
       "latam_adaptation": "2-3 frases sobre los ajustes específicos para LATAM",
-      "rpm_alignment": "2-3 frases explicando por qué esta solución calza con el perfil RPM específico del usuario (cita Results/Purpose/recursos)",
+      "rpm_alignment": "2-3 frases explicando por qué esta solución calza con el perfil RPM específico del usuario",
       "difficulty": "baja | media | alta",
       "difficulty_reasoning": "1-2 frases sobre capital, habilidades y complejidad",
       "fit_score": número 0-100,
@@ -51,20 +43,13 @@ Devuelve SOLO un JSON válido con esta forma exacta:
 }
 
 Reglas estrictas:
-- EXACTAMENTE 4 soluciones distintas (nada de duplicados temáticos)
-- Cada una debe ser ejecutable POR EL USUARIO con sus recursos reales (no genérica "podrías hacer una app de fintech")
+- EXACTAMENTE 4 soluciones distintas
+- Cada una debe ser ejecutable POR EL USUARIO con sus recursos reales
 - source_video_ids deben ser ids reales que aparecen en la lista de videos
 - pain_point_id debe ser id real de la lista de pain points
-- NO incluyas markdown ni explicaciones fuera del JSON
 - fit_score debe ser la suma de pain_severity + rpm_fit + viability`;
 
-function extractJson(text) {
-  const m = text.match(/\{[\s\S]*\}/);
-  return m ? m[0] : text;
-}
-
 export async function generateSolutions({ replaceExisting = true } = {}) {
-  // 1. Cargar perfil RPM completo
   const { data: profile } = await supabase
     .from('rpm_profiles')
     .select('*')
@@ -77,7 +62,6 @@ export async function generateSolutions({ replaceExisting = true } = {}) {
     throw new Error('Debes completar y procesar tu perfil RPM antes de generar soluciones.');
   }
 
-  // 2. Cargar pain points con sus videos clasificados (top 2 por relevance)
   const { data: painPoints } = await supabase
     .from('pain_points')
     .select('*')
@@ -87,7 +71,6 @@ export async function generateSolutions({ replaceExisting = true } = {}) {
     throw new Error('No hay pain points. Extrae pain points desde los videos primero.');
   }
 
-  // 3. Cargar clasificaciones con info de video y análisis
   const { data: classifications } = await supabase
     .from('video_pain_point_classifications')
     .select('*, videos(id, title, url, video_analyses(business_name, industry, business_model, monetization, summary))')
@@ -97,14 +80,12 @@ export async function generateSolutions({ replaceExisting = true } = {}) {
     throw new Error('No hay clasificaciones video↔pain-point. Clasifica los videos primero.');
   }
 
-  // 4. Top 2 videos por pain point
   const topByPain = {};
   for (const c of classifications) {
     if (!topByPain[c.pain_point_id]) topByPain[c.pain_point_id] = [];
     if (topByPain[c.pain_point_id].length < 2) topByPain[c.pain_point_id].push(c);
   }
 
-  // 5. Construir input compacto para Claude
   const rpm = profile.ai_interpretation || {};
 
   const ppContext = painPoints
@@ -128,24 +109,15 @@ PAIN POINTS LATAM CON VIDEOS DE INSPIRACIÓN:
 
 ${ppContext}`;
 
-  // 6. Llamada IA
-  const client = await getClient();
-  const resp = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4000,
+  const parsed = await chatJson({
     system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userMsg }],
+    user: userMsg,
+    maxTokens: 4000,
   });
-
-  const text = resp.content?.[0]?.text || '{}';
-  let parsed;
-  try { parsed = JSON.parse(extractJson(text)); }
-  catch { throw new Error('La IA no devolvió JSON válido. Respuesta: ' + text.slice(0, 300)); }
 
   const solutions = parsed.solutions || [];
   if (solutions.length === 0) throw new Error('La IA no generó ninguna solución.');
 
-  // 7. Persistir
   if (replaceExisting) {
     await supabase.from('solutions').delete().eq('rpm_profile_id', profile.id);
   }
@@ -176,7 +148,6 @@ ${ppContext}`;
     if (insErr) { console.error('insert solution', insErr.message); continue; }
     const solutionId = ins.id;
 
-    // Trazabilidad: source videos
     const ids = (s.source_video_ids || []).filter((id) => validVideoIds.has(id));
     if (ids.length > 0) {
       const rows = ids.map((vid) => ({
@@ -187,21 +158,7 @@ ${ppContext}`;
       await supabase.from('solution_video_sources').insert(rows);
     }
 
-    inserted.push({
-      solution_id: solutionId,
-      title: s.title,
-      pain_point_id: s.pain_point_id,
-      fit_score: s.fit_score,
-      // Devolvemos también campos extra que no van a la tabla pero el frontend los puede mostrar al instante
-      extras: {
-        difficulty_reasoning: s.difficulty_reasoning,
-        fit_score_breakdown: s.fit_score_breakdown,
-        first_steps: s.first_steps,
-        monetization_model: s.monetization_model,
-        monthly_revenue_potential_usd: s.monthly_revenue_potential_usd,
-        source_inspiration: s.source_inspiration,
-      },
-    });
+    inserted.push({ solution_id: solutionId, title: s.title, pain_point_id: s.pain_point_id, fit_score: s.fit_score });
   }
 
   return {

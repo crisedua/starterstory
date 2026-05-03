@@ -1,13 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { supabase, getSetting } from '../db/supabase.js';
-
-async function getClient() {
-  const key = (await getSetting('anthropic_api_key')) || process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY no configurado.');
-  return new Anthropic({ apiKey: key });
-}
-
-const MODEL = 'claude-haiku-4-5-20251001';
+import { supabase } from '../db/supabase.js';
+import { chatJson } from './llm.js';
 
 const CLASSIFY_SYSTEM = `Eres un consultor que evalúa si un negocio documentado en un video de YouTube (de un emprendedor, generalmente en EE.UU. o Europa) puede inspirar soluciones para problemas reales del mercado latinoamericano.
 
@@ -31,13 +23,7 @@ Devuelve SOLO un JSON válido con esta forma exacta:
 Reglas estrictas:
 - Solo incluye matches con relevance_score >= 0.3 (filtra ruido)
 - Sé conservador: si la conexión no es clara y específica, NO la incluyas
-- Considera transferibilidad: ¿el modelo funciona con la infraestructura LATAM (medios de pago, conectividad, regulación)?
-- NO incluyas markdown ni explicaciones fuera del JSON.`;
-
-function extractJson(text) {
-  const m = text.match(/\{[\s\S]*\}/);
-  return m ? m[0] : text;
-}
+- Considera transferibilidad: ¿el modelo funciona con la infraestructura LATAM?`;
 
 async function fetchPainPoints() {
   const { data, error } = await supabase
@@ -48,7 +34,6 @@ async function fetchPainPoints() {
 }
 
 export async function classifyVideo(videoId, { force = false } = {}) {
-  // 1. Carga video + análisis + transcripción
   const { data: v, error } = await supabase
     .from('videos').select('*').eq('id', videoId).maybeSingle();
   if (error) throw error;
@@ -61,7 +46,6 @@ export async function classifyVideo(videoId, { force = false } = {}) {
 
   if (!a) throw new Error('video sin análisis IA todavía. Ejecuta análisis primero.');
 
-  // 2. ¿Ya clasificado? Saltar si no se fuerza
   if (!force) {
     const { count } = await supabase
       .from('video_pain_point_classifications')
@@ -72,7 +56,6 @@ export async function classifyVideo(videoId, { force = false } = {}) {
     await supabase.from('video_pain_point_classifications').delete().eq('video_id', videoId);
   }
 
-  // 3. Construye contexto
   const painPoints = await fetchPainPoints();
   if (painPoints.length === 0) throw new Error('No hay pain points definidos.');
 
@@ -89,21 +72,10 @@ export async function classifyVideo(videoId, { force = false } = {}) {
 
   const userMsg = `${businessContext}\n\nPAIN POINTS LATAM:\n${ppList}`;
 
-  // 4. Llamada IA
-  const client = await getClient();
-  const resp = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2000,
-    system: CLASSIFY_SYSTEM,
-    messages: [{ role: 'user', content: userMsg }],
-  });
-  const text = resp.content?.[0]?.text || '{}';
-
   let parsed;
-  try { parsed = JSON.parse(extractJson(text)); }
+  try { parsed = await chatJson({ system: CLASSIFY_SYSTEM, user: userMsg, maxTokens: 2000 }); }
   catch { parsed = { matches: [] }; }
 
-  // 5. Persistir clasificaciones (solo válidas)
   const validIds = new Set(painPoints.map((p) => p.id));
   const matches = (parsed.matches || []).filter(
     (m) => validIds.has(m.pain_point_id) && m.relevance_score >= 0.3
@@ -126,11 +98,9 @@ export async function classifyVideo(videoId, { force = false } = {}) {
 }
 
 export async function classifyAll({ force = false, limit = null } = {}) {
-  // Solo videos con análisis IA disponible
   const { data: analyses } = await supabase.from('video_analyses').select('video_id');
   let ids = (analyses || []).map((a) => a.video_id);
 
-  // Si no se fuerza, saltar los ya clasificados (a nivel de batch top-level)
   if (!force) {
     const { data: classified } = await supabase
       .from('video_pain_point_classifications').select('video_id');
@@ -157,8 +127,6 @@ export async function classifyAll({ force = false, limit = null } = {}) {
   };
 }
 
-// Borra todas las clasificaciones existentes. Se llama UNA vez,
-// luego el frontend itera classifyAll() hasta que remaining = 0.
 export async function resetClassifications() {
   const { error } = await supabase
     .from('video_pain_point_classifications').delete().neq('id', 0);
